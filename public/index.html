@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monday-Zira-Sync</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <p class="eyebrow">Board View</p>
+        <h1>Monday-Zira-Sync</h1>
+        <p class="subtitle">
+          Select your Jira account and destination project for this board.
+        </p>
+
+        <div class="board-meta">
+          <span>Board ID:</span>
+          <strong id="boardIdLabel">Detecting...</strong>
+        </div>
+
+        <label for="accountSelect">Jira account</label>
+        <select id="accountSelect" disabled>
+          <option value="">Loading accounts...</option>
+        </select>
+
+        <label for="projectSelect">Jira project (space)</label>
+        <select id="projectSelect" disabled>
+          <option value="">Select an account first</option>
+        </select>
+
+        <button id="saveButton" type="button" disabled>Save board mapping</button>
+
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/monday-sdk-js/dist/main.js"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

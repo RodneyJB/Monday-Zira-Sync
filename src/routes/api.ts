@@ -1,0 +1,89 @@
+import { Router } from "express";
+import { z } from "zod";
+
+import { config } from "../config.js";
+import { getBoardMapping, saveBoardMapping } from "../services/mappingStore.js";
+import { listJiraProjects } from "../services/jiraService.js";
+
+const saveMappingSchema = z.object({
+  boardId: z.string().min(1),
+  accountId: z.string().min(1),
+  projectKey: z.string().min(1),
+  projectName: z.string().min(1)
+});
+
+export const apiRouter = Router();
+
+apiRouter.get("/jira/accounts", (_req, res) => {
+  const accounts = config.jiraAccounts.map((account) => ({
+    id: account.id,
+    name: account.name,
+    baseUrl: account.baseUrl
+  }));
+
+  res.json({ accounts });
+});
+
+apiRouter.get("/jira/projects", async (req, res) => {
+  const accountId = req.query.accountId;
+
+  if (typeof accountId !== "string" || accountId.length === 0) {
+    res.status(400).json({ error: "accountId query parameter is required" });
+    return;
+  }
+
+  const account = config.jiraAccounts.find((item) => item.id === accountId);
+
+  if (!account) {
+    res.status(404).json({ error: "Jira account not found" });
+    return;
+  }
+
+  try {
+    const projects = await listJiraProjects(account);
+    res.json({ projects });
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: "Could not fetch Jira projects", details });
+  }
+});
+
+apiRouter.get("/mapping", async (req, res) => {
+  const boardId = req.query.boardId;
+
+  if (typeof boardId !== "string" || boardId.length === 0) {
+    res.status(400).json({ error: "boardId query parameter is required" });
+    return;
+  }
+
+  const mapping = await getBoardMapping(boardId);
+  res.json({ mapping });
+});
+
+apiRouter.post("/mapping", async (req, res) => {
+  const parsed = saveMappingSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+    return;
+  }
+
+  const account = config.jiraAccounts.find((item) => item.id === parsed.data.accountId);
+  if (!account) {
+    res.status(404).json({ error: "Jira account not found" });
+    return;
+  }
+
+  const mapping = await saveBoardMapping(parsed.data);
+  res.status(201).json({ mapping });
+});
+
+apiRouter.post("/monday/webhook", (req, res) => {
+  const challenge = req.body?.challenge;
+  if (typeof challenge === "string") {
+    res.status(200).json({ challenge });
+    return;
+  }
+
+  res.status(202).json({ received: true });
+});
