@@ -60,7 +60,33 @@ const saveMappingSchema = z.object({
   nameColumnId: optionalTextField,
   attachmentSource: z.enum(["item_assets", "file_column"]).default("item_assets"),
   attachmentColumnId: optionalTextField,
-  nameTranslations: optionalTranslationMap.default({})
+  nameTranslations: optionalTranslationMap.default({}),
+  targetLanguage: z
+    .enum([
+      "none",
+      "en",
+      "de",
+      "fr",
+      "es",
+      "it",
+      "nl",
+      "pl",
+      "pt",
+      "sv",
+      "da",
+      "no",
+      "fi",
+      "cs",
+      "sk",
+      "sl",
+      "hr",
+      "hu",
+      "ro",
+      "bg",
+      "el",
+      "tr"
+    ])
+    .default("none")
 });
 
 const syncItemSchema = z.object({

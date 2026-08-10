@@ -1,5 +1,6 @@
 const accountSelect = document.getElementById("accountSelect");
 const projectSelect = document.getElementById("projectSelect");
+const targetLanguageSelect = document.getElementById("targetLanguageSelect");
 const syncTriggerSelect = document.getElementById("syncTriggerSelect");
 const statusColumnIdInput = document.getElementById("statusColumnIdInput");
 const triggerStatusLabelInput = document.getElementById("triggerStatusLabelInput");
@@ -214,6 +215,7 @@ async function loadExistingMapping() {
   accountSelect.value = mapping.accountId;
   await loadProjects(mapping.accountId);
   projectSelect.value = mapping.projectKey;
+  targetLanguageSelect.value = mapping.targetLanguage || "none";
   syncTriggerSelect.value = mapping.syncTrigger || "manual";
   populateStatusColumnOptions(mapping.statusColumnId || "");
   populateStatusLabelOptions(mapping.statusColumnId || "", mapping.triggerStatusLabel || "");
@@ -263,6 +265,7 @@ saveButton.addEventListener("click", async () => {
   const accountId = accountSelect.value;
   const projectKey = projectSelect.value;
   const projectName = projectSelect.options[projectSelect.selectedIndex]?.text || "";
+  const targetLanguage = targetLanguageSelect.value;
   const syncTrigger = syncTriggerSelect.value;
   const statusColumnId = statusColumnIdInput.value.trim();
   const triggerStatusLabel = triggerStatusLabelInput.value.trim();
@@ -306,6 +309,7 @@ saveButton.addEventListener("click", async () => {
         accountId,
         projectKey,
         projectName,
+        targetLanguage,
         syncTrigger,
         statusColumnId: syncTrigger === "status_change" ? statusColumnId : "",
         triggerStatusLabel: syncTrigger === "status_change" ? triggerStatusLabel : "",

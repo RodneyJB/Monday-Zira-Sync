@@ -15,6 +15,7 @@ export type BoardMapping = {
   attachmentSource: "item_assets" | "file_column";
   attachmentColumnId?: string;
   nameTranslations: Record<string, string>;
+  targetLanguage: string;
   updatedAt: string;
 };
 
@@ -25,13 +26,19 @@ let loaded = false;
 function normalizeMapping(
   record: Omit<
     BoardMapping,
-    "syncTrigger" | "keepSynced" | "nameSource" | "attachmentSource" | "nameTranslations"
+    | "syncTrigger"
+    | "keepSynced"
+    | "nameSource"
+    | "attachmentSource"
+    | "nameTranslations"
+    | "targetLanguage"
   > & {
   syncTrigger?: "manual" | "status_change";
   keepSynced?: boolean;
     nameSource?: "item_name" | "text_column";
     attachmentSource?: "item_assets" | "file_column";
     nameTranslations?: Record<string, string>;
+    targetLanguage?: string;
   }
 ): BoardMapping {
   return {
@@ -40,7 +47,8 @@ function normalizeMapping(
     keepSynced: record.keepSynced ?? true,
     nameSource: record.nameSource ?? "item_name",
     attachmentSource: record.attachmentSource ?? "item_assets",
-    nameTranslations: record.nameTranslations ?? {}
+    nameTranslations: record.nameTranslations ?? {},
+    targetLanguage: record.targetLanguage ?? "none"
   };
 }
 
@@ -54,13 +62,19 @@ async function loadStore(): Promise<void> {
     const parsed = JSON.parse(raw) as Array<
       Omit<
         BoardMapping,
-        "syncTrigger" | "keepSynced" | "nameSource" | "attachmentSource" | "nameTranslations"
+        | "syncTrigger"
+        | "keepSynced"
+        | "nameSource"
+        | "attachmentSource"
+        | "nameTranslations"
+        | "targetLanguage"
       > & {
         syncTrigger?: "manual" | "status_change";
         keepSynced?: boolean;
         nameSource?: "item_name" | "text_column";
         attachmentSource?: "item_assets" | "file_column";
         nameTranslations?: Record<string, string>;
+        targetLanguage?: string;
       }
     >;
     cache = new Map(parsed.map((entry) => [entry.boardId, normalizeMapping(entry)]));
@@ -97,6 +111,7 @@ export async function saveBoardMapping(input: {
   attachmentSource?: "item_assets" | "file_column";
   attachmentColumnId?: string;
   nameTranslations?: Record<string, string>;
+  targetLanguage?: string;
 }): Promise<BoardMapping> {
   await loadStore();
 
@@ -107,6 +122,7 @@ export async function saveBoardMapping(input: {
     nameSource: input.nameSource ?? "item_name",
     attachmentSource: input.attachmentSource ?? "item_assets",
     nameTranslations: input.nameTranslations ?? {},
+    targetLanguage: input.targetLanguage ?? "none",
     updatedAt: new Date().toISOString()
   };
 

@@ -7,6 +7,7 @@ import {
 import { getBoardMapping } from "./mappingStore.js";
 import { getMondayItemForSync } from "./mondayService.js";
 import { getSyncedItem, setSyncedItem } from "./syncStateStore.js";
+import { translateText } from "./translationService.js";
 
 export type SyncResult = {
   issueKey: string;
@@ -27,17 +28,21 @@ function applyNameTranslations(name: string, translations: Record<string, string
   return output;
 }
 
-function resolveSummaryFromMapping(
+async function resolveSummaryFromMapping(
   mondayItem: Awaited<ReturnType<typeof getMondayItemForSync>>,
   mapping: Awaited<ReturnType<typeof getBoardMapping>>
-): string {
+): Promise<string> {
   const baseName =
     mapping?.nameSource === "text_column" && mapping.nameColumnId
       ? mondayItem.columnValues.find((column) => column.id === mapping.nameColumnId)?.text || mondayItem.name
       : mondayItem.name;
 
   const translated = applyNameTranslations(baseName, mapping?.nameTranslations ?? {});
-  return translated.trim() || mondayItem.name;
+  const normalized = translated.trim() || mondayItem.name;
+  return translateText({
+    text: normalized,
+    targetLanguage: mapping?.targetLanguage ?? "none"
+  });
 }
 
 function extractAssetIdsFromFileColumnValue(rawValue: string): string[] {
@@ -116,7 +121,7 @@ export async function syncMondayItemToJira(input: {
   }
 
   const mondayItem = await getMondayItemForSync(itemId);
-  const summary = resolveSummaryFromMapping(mondayItem, mapping);
+  const summary = await resolveSummaryFromMapping(mondayItem, mapping);
   const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
   let issueKey = existing?.issueKey;
   let created = false;

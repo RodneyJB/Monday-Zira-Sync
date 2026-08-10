@@ -104,6 +104,7 @@ Mapping payload rule fields:
 
 Mapping payload field-mapping options:
 
+- `targetLanguage`: language code for Jira title translation (`none`, `en`, `de`, `fr`, ...)
 - `nameSource`: `item_name` or `text_column`
 - `nameColumnId`: Monday text/name column id (used when `nameSource=text_column`)
 - `attachmentSource`: `item_assets` or `file_column`
