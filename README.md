@@ -86,6 +86,7 @@ Health endpoint:
 
 - `GET /api/monday/me`
 - `GET /api/monday/board?boardId=<boardId>`
+- `GET /api/monday/status-columns?boardId=<boardId>`
 - `GET /api/jira/accounts`
 - `GET /api/jira/projects?accountId=main`
 - `GET /api/mapping?boardId=<boardId>`

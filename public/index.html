@@ -46,10 +46,14 @@
           </select>
 
           <label for="statusColumnIdInput">Status column ID</label>
-          <input id="statusColumnIdInput" type="text" placeholder="status" />
+          <select id="statusColumnIdInput">
+            <option value="">Loading status columns...</option>
+          </select>
 
           <label for="triggerStatusLabelInput">Trigger status label (optional)</label>
-          <input id="triggerStatusLabelInput" type="text" placeholder="e.g. Done" />
+          <select id="triggerStatusLabelInput">
+            <option value="">Any status label</option>
+          </select>
 
           <label class="checkbox-row" for="keepSyncedCheckbox">
             <input id="keepSyncedCheckbox" type="checkbox" checked />

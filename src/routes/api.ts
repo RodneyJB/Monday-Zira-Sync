@@ -4,7 +4,11 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { getBoardMapping, saveBoardMapping } from "../services/mappingStore.js";
 import { listJiraProjects } from "../services/jiraService.js";
-import { getMondayBoardSummary, getMondayMe } from "../services/mondayService.js";
+import {
+  getMondayBoardStatusColumns,
+  getMondayBoardSummary,
+  getMondayMe
+} from "../services/mondayService.js";
 import { syncMondayItemToJira } from "../services/syncService.js";
 
 const optionalTextField = z.preprocess(
@@ -106,6 +110,23 @@ apiRouter.get("/monday/board", async (req, res) => {
   } catch (error) {
     const details = error instanceof Error ? error.message : "Unknown error";
     res.status(502).json({ error: "Could not fetch Monday board", details });
+  }
+});
+
+apiRouter.get("/monday/status-columns", async (req, res) => {
+  const boardId = req.query.boardId;
+
+  if (typeof boardId !== "string" || boardId.length === 0) {
+    res.status(400).json({ error: "boardId query parameter is required" });
+    return;
+  }
+
+  try {
+    const columns = await getMondayBoardStatusColumns(boardId);
+    res.json({ columns });
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: "Could not fetch Monday status columns", details });
   }
 });
 

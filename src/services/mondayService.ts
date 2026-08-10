@@ -28,6 +28,18 @@ type MondayBoardResponse = {
   }>;
 };
 
+type MondayBoardColumnsResponse = {
+  boards: Array<{
+    id: string;
+    columns: Array<{
+      id: string;
+      title: string;
+      type: string;
+      settings_str: string;
+    }>;
+  }>;
+};
+
 type MondayItemSyncResponse = {
   items: Array<{
     id: string;
@@ -57,6 +69,32 @@ export type MondaySyncItem = {
     fileExtension: string;
   }>;
 };
+
+export type MondayStatusColumn = {
+  id: string;
+  title: string;
+  labels: string[];
+};
+
+function parseStatusLabels(settingsRaw: string): string[] {
+  if (!settingsRaw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(settingsRaw) as {
+      labels?: Record<string, string>;
+    };
+
+    const labels = Object.values(parsed.labels ?? {})
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    return [...new Set(labels)];
+  } catch {
+    return [];
+  }
+}
 
 function assertMondayToken(): string {
   if (!config.MONDAY_API_TOKEN) {
@@ -177,4 +215,35 @@ export async function getMondayItemForSync(itemId: string): Promise<MondaySyncIt
       fileExtension: asset.file_extension
     }))
   };
+}
+
+export async function getMondayBoardStatusColumns(boardId: string): Promise<MondayStatusColumn[]> {
+  const query = `
+    query ($boardId: [ID!]) {
+      boards(ids: $boardId) {
+        id
+        columns {
+          id
+          title
+          type
+          settings_str
+        }
+      }
+    }
+  `;
+
+  const data = await mondayGraphql<MondayBoardColumnsResponse>(query, { boardId: [boardId] });
+  const board = data.boards[0];
+
+  if (!board) {
+    throw new Error("Board not found or not accessible with this token.");
+  }
+
+  return board.columns
+    .filter((column) => column.type === "color" || column.type === "status")
+    .map((column) => ({
+      id: column.id,
+      title: column.title,
+      labels: parseStatusLabels(column.settings_str)
+    }));
 }

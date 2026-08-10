@@ -10,6 +10,7 @@ const statusEl = document.getElementById("status");
 
 let boardId = "";
 let accounts = [];
+let statusColumns = [];
 
 function setStatus(message, type = "") {
   statusEl.textContent = message;
@@ -24,6 +25,49 @@ function refreshRuleFieldState() {
   const statusMode = syncTriggerSelect.value === "status_change";
   statusColumnIdInput.disabled = !statusMode;
   triggerStatusLabelInput.disabled = !statusMode;
+}
+
+function populateStatusColumnOptions(selectedColumnId = "") {
+  statusColumnIdInput.innerHTML = "";
+
+  if (statusColumns.length === 0) {
+    statusColumnIdInput.append(new Option("No status columns found", ""));
+    return;
+  }
+
+  statusColumnIdInput.append(new Option("Select status column", ""));
+  for (const column of statusColumns) {
+    statusColumnIdInput.append(new Option(`${column.title} (${column.id})`, column.id));
+  }
+
+  if (selectedColumnId) {
+    statusColumnIdInput.value = selectedColumnId;
+  }
+}
+
+function populateStatusLabelOptions(columnId, selectedLabel = "") {
+  triggerStatusLabelInput.innerHTML = "";
+  triggerStatusLabelInput.append(new Option("Any status label", ""));
+
+  const selectedColumn = statusColumns.find((entry) => entry.id === columnId);
+  for (const label of selectedColumn?.labels || []) {
+    triggerStatusLabelInput.append(new Option(label, label));
+  }
+
+  if (selectedLabel) {
+    triggerStatusLabelInput.value = selectedLabel;
+  }
+}
+
+async function loadStatusColumns() {
+  if (!boardId) {
+    return;
+  }
+
+  const data = await fetchJson(`/api/monday/status-columns?boardId=${encodeURIComponent(boardId)}`);
+  statusColumns = data.columns || [];
+  populateStatusColumnOptions();
+  populateStatusLabelOptions("");
 }
 
 function extractBoardId(context) {
@@ -113,8 +157,8 @@ async function loadExistingMapping() {
   await loadProjects(mapping.accountId);
   projectSelect.value = mapping.projectKey;
   syncTriggerSelect.value = mapping.syncTrigger || "manual";
-  statusColumnIdInput.value = mapping.statusColumnId || "";
-  triggerStatusLabelInput.value = mapping.triggerStatusLabel || "";
+  populateStatusColumnOptions(mapping.statusColumnId || "");
+  populateStatusLabelOptions(mapping.statusColumnId || "", mapping.triggerStatusLabel || "");
   keepSyncedCheckbox.checked = mapping.keepSynced !== false;
   refreshRuleFieldState();
   setStatus(`Current mapping: ${mapping.projectName} (${mapping.projectKey})`, "ok");
@@ -143,6 +187,9 @@ accountSelect.addEventListener("change", async () => {
 
 projectSelect.addEventListener("change", setSaveEnabled);
 syncTriggerSelect.addEventListener("change", refreshRuleFieldState);
+statusColumnIdInput.addEventListener("change", () => {
+  populateStatusLabelOptions(statusColumnIdInput.value);
+});
 
 saveButton.addEventListener("click", async () => {
   const accountId = accountSelect.value;
@@ -204,9 +251,10 @@ saveButton.addEventListener("click", async () => {
         setSaveEnabled();
 
         try {
+          await loadStatusColumns();
           await loadExistingMapping();
         } catch {
-          setStatus("No existing board mapping found yet.");
+          setStatus("Could not load mapping or status columns for this board.", "error");
         }
       });
 
@@ -221,9 +269,10 @@ saveButton.addEventListener("click", async () => {
         setSaveEnabled();
 
         try {
+          await loadStatusColumns();
           await loadExistingMapping();
         } catch {
-          setStatus("No existing board mapping found yet.");
+          setStatus("Could not load mapping or status columns for this board.", "error");
         }
       });
     } else {
