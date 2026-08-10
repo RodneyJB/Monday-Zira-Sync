@@ -18,7 +18,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/api", apiRouter);
 
-app.get("*", (_req, res) => {
+app.use((_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
