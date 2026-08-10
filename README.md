@@ -9,6 +9,8 @@ Monday board view app to choose a Jira account and project (space) per board, th
   - Jira account
   - Jira project/space
 - Saves the mapping for each Monday board.
+- Syncs Monday item name to Jira issue summary.
+- Syncs Monday item images/files to Jira issue attachments.
 - Exposes webhook and API routes for future item-to-issue sync logic.
 
 ## Local setup
@@ -83,7 +85,17 @@ Health endpoint:
 - `GET /api/jira/projects?accountId=main`
 - `GET /api/mapping?boardId=<boardId>`
 - `POST /api/mapping`
+- `POST /api/sync/item`
 - `POST /api/monday/webhook`
+
+Manual sync payload example:
+
+```json
+{
+   "boardId": "509766020",
+   "itemId": "123456789"
+}
+```
 
 ## Monday API hookup in developer center
 

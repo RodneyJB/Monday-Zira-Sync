@@ -5,12 +5,18 @@ import { config } from "../config.js";
 import { getBoardMapping, saveBoardMapping } from "../services/mappingStore.js";
 import { listJiraProjects } from "../services/jiraService.js";
 import { getMondayBoardSummary, getMondayMe } from "../services/mondayService.js";
+import { syncMondayItemToJira } from "../services/syncService.js";
 
 const saveMappingSchema = z.object({
   boardId: z.string().min(1),
   accountId: z.string().min(1),
   projectKey: z.string().min(1),
   projectName: z.string().min(1)
+});
+
+const syncItemSchema = z.object({
+  boardId: z.string().min(1),
+  itemId: z.string().min(1)
 });
 
 export const apiRouter = Router();
@@ -106,11 +112,40 @@ apiRouter.post("/mapping", async (req, res) => {
   res.status(201).json({ mapping });
 });
 
-apiRouter.post("/monday/webhook", (req, res) => {
+apiRouter.post("/sync/item", async (req, res) => {
+  const parsed = syncItemSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const result = await syncMondayItemToJira(parsed.data);
+    res.status(200).json({ result });
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: "Could not sync Monday item to Jira", details });
+  }
+});
+
+apiRouter.post("/monday/webhook", async (req, res) => {
   const challenge = req.body?.challenge;
   if (typeof challenge === "string") {
     res.status(200).json({ challenge });
     return;
+  }
+
+  const event = req.body?.event;
+  const boardId = String(event?.boardId ?? event?.board_id ?? "");
+  const itemId = String(event?.pulseId ?? event?.pulse_id ?? event?.itemId ?? event?.item_id ?? "");
+
+  if (boardId && itemId) {
+    try {
+      await syncMondayItemToJira({ boardId, itemId });
+    } catch (error) {
+      const details = error instanceof Error ? error.message : "Unknown error";
+      console.error("Webhook sync failed", { boardId, itemId, details });
+    }
   }
 
   res.status(202).json({ received: true });

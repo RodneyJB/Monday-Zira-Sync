@@ -28,6 +28,36 @@ type MondayBoardResponse = {
   }>;
 };
 
+type MondayItemSyncResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    board: {
+      id: string;
+      name: string;
+    };
+    assets: Array<{
+      id: string;
+      name: string;
+      public_url: string;
+      file_extension: string;
+    }>;
+  }>;
+};
+
+export type MondaySyncItem = {
+  id: string;
+  name: string;
+  boardId: string;
+  boardName: string;
+  assets: Array<{
+    id: string;
+    name: string;
+    publicUrl: string;
+    fileExtension: string;
+  }>;
+};
+
 function assertMondayToken(): string {
   if (!config.MONDAY_API_TOKEN) {
     throw new Error("MONDAY_API_TOKEN is not configured.");
@@ -105,5 +135,46 @@ export async function getMondayBoardSummary(boardId: string) {
     id: board.id,
     name: board.name,
     items: board.items_page.items
+  };
+}
+
+export async function getMondayItemForSync(itemId: string): Promise<MondaySyncItem> {
+  const query = `
+    query ($itemId: [ID!]) {
+      items(ids: $itemId) {
+        id
+        name
+        board {
+          id
+          name
+        }
+        assets {
+          id
+          name
+          public_url
+          file_extension
+        }
+      }
+    }
+  `;
+
+  const data = await mondayGraphql<MondayItemSyncResponse>(query, { itemId: [itemId] });
+  const item = data.items[0];
+
+  if (!item) {
+    throw new Error("Monday item not found or not accessible with this token.");
+  }
+
+  return {
+    id: item.id,
+    name: item.name,
+    boardId: item.board.id,
+    boardName: item.board.name,
+    assets: (item.assets ?? []).map((asset) => ({
+      id: asset.id,
+      name: asset.name,
+      publicUrl: asset.public_url,
+      fileExtension: asset.file_extension
+    }))
   };
 }
