@@ -28,6 +28,8 @@ copy .env.example .env
 3. Edit `.env` and configure Jira accounts:
 
 ```env
+MONDAY_API_TOKEN=your-monday-token
+MONDAY_API_VERSION=2025-04
 JIRA_ACCOUNTS_JSON=[{"id":"main","name":"Rodney Jira","baseUrl":"https://your-domain.atlassian.net","email":"jira-user@company.com","apiToken":"your-jira-api-token"}]
 ```
 
@@ -63,6 +65,8 @@ This repo includes `render.yaml` for a web service.
 1. Push code to GitHub.
 2. In Render, create a **Blueprint** or **Web Service** from this repo.
 3. Add env var:
+   - `MONDAY_API_TOKEN` (required for backend Monday API calls)
+   - `MONDAY_API_VERSION` (optional, default is `2025-04`)
    - `JIRA_ACCOUNTS_JSON` (required)
    - `MONDAY_SIGNING_SECRET` (optional now, useful for webhook hardening)
 4. Deploy.
@@ -73,11 +77,24 @@ Health endpoint:
 
 ## API routes
 
+- `GET /api/monday/me`
+- `GET /api/monday/board?boardId=<boardId>`
 - `GET /api/jira/accounts`
 - `GET /api/jira/projects?accountId=main`
 - `GET /api/mapping?boardId=<boardId>`
 - `POST /api/mapping`
 - `POST /api/monday/webhook`
+
+## Monday API hookup in developer center
+
+1. In Monday Developers, open your app.
+2. Enable the Board View feature and point the URL to your Render app URL.
+3. Create a Monday API token with access to the boards you want to sync.
+4. Set that token as `MONDAY_API_TOKEN` in Render environment variables.
+5. Redeploy.
+6. Verify connection:
+   - `GET /api/monday/me`
+   - `GET /api/monday/board?boardId=<your_board_id>`
 
 ## Important note
 

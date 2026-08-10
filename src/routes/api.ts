@@ -4,6 +4,7 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { getBoardMapping, saveBoardMapping } from "../services/mappingStore.js";
 import { listJiraProjects } from "../services/jiraService.js";
+import { getMondayBoardSummary, getMondayMe } from "../services/mondayService.js";
 
 const saveMappingSchema = z.object({
   boardId: z.string().min(1),
@@ -13,6 +14,33 @@ const saveMappingSchema = z.object({
 });
 
 export const apiRouter = Router();
+
+apiRouter.get("/monday/me", async (_req, res) => {
+  try {
+    const me = await getMondayMe();
+    res.json({ me });
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: "Could not reach Monday API", details });
+  }
+});
+
+apiRouter.get("/monday/board", async (req, res) => {
+  const boardId = req.query.boardId;
+
+  if (typeof boardId !== "string" || boardId.length === 0) {
+    res.status(400).json({ error: "boardId query parameter is required" });
+    return;
+  }
+
+  try {
+    const board = await getMondayBoardSummary(boardId);
+    res.json({ board });
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: "Could not fetch Monday board", details });
+  }
+});
 
 apiRouter.get("/jira/accounts", (_req, res) => {
   const accounts = config.jiraAccounts.map((account) => ({

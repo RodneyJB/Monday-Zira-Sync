@@ -3,7 +3,7 @@ services:
     name: monday-zira-sync
     runtime: node
     plan: starter
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     autoDeploy: true
     envVars:
@@ -11,6 +11,10 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: MONDAY_API_VERSION
+        value: 2025-04
       - key: JIRA_ACCOUNTS_JSON
         sync: false
       - key: MONDAY_SIGNING_SECRET
