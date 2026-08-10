@@ -5,6 +5,7 @@ export type SyncedItemRecord = {
   boardId: string;
   itemId: string;
   issueKey: string;
+  uploadedAssetIds: string[];
   syncedAt: string;
 };
 
@@ -47,11 +48,15 @@ export async function setSyncedItem(input: {
   boardId: string;
   itemId: string;
   issueKey: string;
+  uploadedAssetIds?: string[];
 }): Promise<SyncedItemRecord> {
   await loadStore();
 
+  const existing = cache.get(makeKey(input.boardId, input.itemId));
+
   const record: SyncedItemRecord = {
     ...input,
+    uploadedAssetIds: input.uploadedAssetIds ?? existing?.uploadedAssetIds ?? [],
     syncedAt: new Date().toISOString()
   };
 

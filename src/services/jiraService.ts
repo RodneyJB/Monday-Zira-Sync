@@ -99,6 +99,47 @@ export async function createJiraIssue(input: {
   return response.data;
 }
 
+export async function updateJiraIssueSummary(input: {
+  account: JiraAccountConfig;
+  issueIdOrKey: string;
+  summary: string;
+  description?: string;
+}): Promise<void> {
+  const { account, issueIdOrKey, summary, description } = input;
+  const url = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
+
+  await axios.put(
+    url.toString(),
+    {
+      fields: {
+        summary,
+        description: {
+          type: "doc",
+          version: 1,
+          content: [
+            {
+              type: "paragraph",
+              content: [
+                {
+                  type: "text",
+                  text: description ?? "Updated automatically from Monday board item."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      headers: {
+        ...jiraHeaders(account),
+        "Content-Type": "application/json"
+      },
+      timeout: 15000
+    }
+  );
+}
+
 export async function uploadJiraAttachmentFromUrl(input: {
   account: JiraAccountConfig;
   issueIdOrKey: string;

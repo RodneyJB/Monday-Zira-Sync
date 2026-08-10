@@ -39,7 +39,7 @@ type MondayItemSyncResponse = {
     assets: Array<{
       id: string;
       name: string;
-      public_url: string;
+          public_url: string | null;
       file_extension: string;
     }>;
   }>;
@@ -173,7 +173,7 @@ export async function getMondayItemForSync(itemId: string): Promise<MondaySyncIt
     assets: (item.assets ?? []).map((asset) => ({
       id: asset.id,
       name: asset.name,
-      publicUrl: asset.public_url,
+      publicUrl: asset.public_url ?? "",
       fileExtension: asset.file_extension
     }))
   };

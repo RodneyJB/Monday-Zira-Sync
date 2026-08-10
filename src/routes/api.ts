@@ -7,11 +7,27 @@ import { listJiraProjects } from "../services/jiraService.js";
 import { getMondayBoardSummary, getMondayMe } from "../services/mondayService.js";
 import { syncMondayItemToJira } from "../services/syncService.js";
 
+const optionalTextField = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? undefined : trimmed;
+  },
+  z.string().optional()
+);
+
 const saveMappingSchema = z.object({
   boardId: z.string().min(1),
   accountId: z.string().min(1),
   projectKey: z.string().min(1),
-  projectName: z.string().min(1)
+  projectName: z.string().min(1),
+  syncTrigger: z.enum(["manual", "status_change"]).default("manual"),
+  statusColumnId: optionalTextField,
+  triggerStatusLabel: optionalTextField,
+  keepSynced: z.boolean().default(true)
 });
 
 const syncItemSchema = z.object({
@@ -20,6 +36,51 @@ const syncItemSchema = z.object({
 });
 
 export const apiRouter = Router();
+
+function asText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  return "";
+}
+
+function parseEventValue(rawValue: unknown): Record<string, unknown> {
+  if (rawValue && typeof rawValue === "object") {
+    return rawValue as Record<string, unknown>;
+  }
+
+  if (typeof rawValue === "string") {
+    try {
+      const parsed = JSON.parse(rawValue) as unknown;
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
+function extractStatusLabelFromEvent(event: Record<string, unknown>): string {
+  const value = parseEventValue(event.value);
+  const label = value.label;
+
+  if (label && typeof label === "object") {
+    const text = asText((label as Record<string, unknown>).text);
+    if (text) {
+      return text;
+    }
+  }
+
+  return asText(value.label) || asText(value.text);
+}
 
 apiRouter.get("/monday/me", async (_req, res) => {
   try {
@@ -120,7 +181,7 @@ apiRouter.post("/sync/item", async (req, res) => {
   }
 
   try {
-    const result = await syncMondayItemToJira(parsed.data);
+    const result = await syncMondayItemToJira({ ...parsed.data, keepSynced: true });
     res.status(200).json({ result });
   } catch (error) {
     const details = error instanceof Error ? error.message : "Unknown error";
@@ -135,13 +196,50 @@ apiRouter.post("/monday/webhook", async (req, res) => {
     return;
   }
 
-  const event = req.body?.event;
-  const boardId = String(event?.boardId ?? event?.board_id ?? "");
-  const itemId = String(event?.pulseId ?? event?.pulse_id ?? event?.itemId ?? event?.item_id ?? "");
+  const event = (req.body?.event ?? {}) as Record<string, unknown>;
+  const boardId =
+    asText(event.boardId) || asText(event.board_id) || asText(event.boardid) || asText(event.board_id);
+  const itemId =
+    asText(event.pulseId) ||
+    asText(event.pulse_id) ||
+    asText(event.itemId) ||
+    asText(event.item_id) ||
+    asText(event.pulseid);
 
   if (boardId && itemId) {
     try {
-      await syncMondayItemToJira({ boardId, itemId });
+      const mapping = await getBoardMapping(boardId);
+      if (!mapping) {
+        res.status(202).json({ received: true, skipped: "No board mapping" });
+        return;
+      }
+
+      if (mapping.syncTrigger === "manual") {
+        res.status(202).json({ received: true, skipped: "Manual trigger mode" });
+        return;
+      }
+
+      const eventColumnId = asText(event.columnId) || asText(event.column_id);
+      if (!eventColumnId) {
+        res.status(202).json({ received: true, skipped: "Not a column change event" });
+        return;
+      }
+
+      if (mapping.statusColumnId && eventColumnId !== mapping.statusColumnId) {
+        res.status(202).json({ received: true, skipped: "Different column" });
+        return;
+      }
+
+      const statusLabel = extractStatusLabelFromEvent(event);
+      if (
+        mapping.triggerStatusLabel &&
+        statusLabel.trim().toLowerCase() !== mapping.triggerStatusLabel.trim().toLowerCase()
+      ) {
+        res.status(202).json({ received: true, skipped: "Status label mismatch" });
+        return;
+      }
+
+      await syncMondayItemToJira({ boardId, itemId, keepSynced: mapping.keepSynced });
     } catch (error) {
       const details = error instanceof Error ? error.message : "Unknown error";
       console.error("Webhook sync failed", { boardId, itemId, details });

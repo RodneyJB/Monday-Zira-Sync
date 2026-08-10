@@ -8,6 +8,11 @@ Monday board view app to choose a Jira account and project (space) per board, th
 - Lets you choose:
   - Jira account
   - Jira project/space
+- Lets you configure sync rules per board:
+   - Manual mode
+   - Status-change trigger mode
+   - Optional trigger status label (e.g. Done)
+   - Keep synced mode for updates after first issue creation
 - Saves the mapping for each Monday board.
 - Syncs Monday item name to Jira issue summary.
 - Syncs Monday item images/files to Jira issue attachments.
@@ -87,6 +92,13 @@ Health endpoint:
 - `POST /api/mapping`
 - `POST /api/sync/item`
 - `POST /api/monday/webhook`
+
+Mapping payload rule fields:
+
+- `syncTrigger`: `manual` or `status_change`
+- `statusColumnId`: Monday status column ID (for status_change mode)
+- `triggerStatusLabel`: Optional status value filter (for example `Done`)
+- `keepSynced`: if true, existing Jira issue keeps updating when the rule matches
 
 Manual sync payload example:
 

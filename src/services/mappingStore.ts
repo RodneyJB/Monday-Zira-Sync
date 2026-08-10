@@ -6,12 +6,27 @@ export type BoardMapping = {
   accountId: string;
   projectKey: string;
   projectName: string;
+  syncTrigger: "manual" | "status_change";
+  statusColumnId?: string;
+  triggerStatusLabel?: string;
+  keepSynced: boolean;
   updatedAt: string;
 };
 
 const storagePath = resolve(process.cwd(), "data", "mappings.json");
 let cache = new Map<string, BoardMapping>();
 let loaded = false;
+
+function normalizeMapping(record: Omit<BoardMapping, "syncTrigger" | "keepSynced"> & {
+  syncTrigger?: "manual" | "status_change";
+  keepSynced?: boolean;
+}): BoardMapping {
+  return {
+    ...record,
+    syncTrigger: record.syncTrigger ?? "manual",
+    keepSynced: record.keepSynced ?? true
+  };
+}
 
 async function loadStore(): Promise<void> {
   if (loaded) {
@@ -20,8 +35,13 @@ async function loadStore(): Promise<void> {
 
   try {
     const raw = await readFile(storagePath, "utf8");
-    const parsed = JSON.parse(raw) as BoardMapping[];
-    cache = new Map(parsed.map((entry) => [entry.boardId, entry]));
+    const parsed = JSON.parse(raw) as Array<
+      Omit<BoardMapping, "syncTrigger" | "keepSynced"> & {
+        syncTrigger?: "manual" | "status_change";
+        keepSynced?: boolean;
+      }
+    >;
+    cache = new Map(parsed.map((entry) => [entry.boardId, normalizeMapping(entry)]));
   } catch {
     cache = new Map();
   }
@@ -37,7 +57,8 @@ async function persistStore(): Promise<void> {
 
 export async function getBoardMapping(boardId: string): Promise<BoardMapping | null> {
   await loadStore();
-  return cache.get(boardId) ?? null;
+  const mapping = cache.get(boardId);
+  return mapping ? normalizeMapping(mapping) : null;
 }
 
 export async function saveBoardMapping(input: {
@@ -45,11 +66,17 @@ export async function saveBoardMapping(input: {
   accountId: string;
   projectKey: string;
   projectName: string;
+  syncTrigger?: "manual" | "status_change";
+  statusColumnId?: string;
+  triggerStatusLabel?: string;
+  keepSynced?: boolean;
 }): Promise<BoardMapping> {
   await loadStore();
 
   const mapping: BoardMapping = {
     ...input,
+    syncTrigger: input.syncTrigger ?? "manual",
+    keepSynced: input.keepSynced ?? true,
     updatedAt: new Date().toISOString()
   };
 

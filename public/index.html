@@ -36,6 +36,27 @@
           <option value="">Select an account first</option>
         </select>
 
+        <fieldset class="rule-box">
+          <legend>Sync rule</legend>
+
+          <label for="syncTriggerSelect">When should sync run?</label>
+          <select id="syncTriggerSelect">
+            <option value="manual">Only manual sync/webhook tests</option>
+            <option value="status_change">When status changes</option>
+          </select>
+
+          <label for="statusColumnIdInput">Status column ID</label>
+          <input id="statusColumnIdInput" type="text" placeholder="status" />
+
+          <label for="triggerStatusLabelInput">Trigger status label (optional)</label>
+          <input id="triggerStatusLabelInput" type="text" placeholder="e.g. Done" />
+
+          <label class="checkbox-row" for="keepSyncedCheckbox">
+            <input id="keepSyncedCheckbox" type="checkbox" checked />
+            <span>Keep synced after first issue creation</span>
+          </label>
+        </fieldset>
+
         <button id="saveButton" type="button" disabled>Save board mapping</button>
 
         <p id="status" class="status" role="status" aria-live="polite"></p>
