@@ -18,6 +18,10 @@ app.get("/health", (_req, res) => {
 
 app.use("/api", apiRouter);
 
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "API route not found" });
+});
+
 app.use((_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });

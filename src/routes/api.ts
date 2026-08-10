@@ -94,6 +94,25 @@ const syncItemSchema = z.object({
   itemId: z.string().min(1)
 });
 
+type WebhookDebugEvent = {
+  at: string;
+  boardId: string;
+  itemId: string;
+  eventColumnId: string;
+  statusLabel: string;
+  decision: string;
+  details?: string;
+};
+
+const webhookDebugEvents: WebhookDebugEvent[] = [];
+
+function addWebhookDebugEvent(event: WebhookDebugEvent): void {
+  webhookDebugEvents.unshift(event);
+  if (webhookDebugEvents.length > 100) {
+    webhookDebugEvents.length = 100;
+  }
+}
+
 export const apiRouter = Router();
 
 function asText(value: unknown): string {
@@ -138,7 +157,32 @@ function extractStatusLabelFromEvent(event: Record<string, unknown>): string {
     }
   }
 
-  return asText(value.label) || asText(value.text);
+  if (typeof label === "string") {
+    return label;
+  }
+
+  const direct =
+    asText(value.text) ||
+    asText(value.label_text) ||
+    asText(event.statusLabel) ||
+    asText(event.status_label) ||
+    asText(event.label) ||
+    asText(event.value);
+
+  return direct;
+}
+
+function extractEventColumnId(event: Record<string, unknown>): string {
+  const parsedValue = parseEventValue(event.value);
+
+  return (
+    asText(event.columnId) ||
+    asText(event.column_id) ||
+    asText(event.columnid) ||
+    asText(parsedValue.column_id) ||
+    asText(parsedValue.columnId) ||
+    asText(parsedValue.id)
+  );
 }
 
 apiRouter.get("/monday/me", async (_req, res) => {
@@ -200,6 +244,14 @@ apiRouter.get("/monday/sync-columns", async (req, res) => {
     const details = error instanceof Error ? error.message : "Unknown error";
     res.status(502).json({ error: "Could not fetch Monday sync columns", details });
   }
+});
+
+apiRouter.get("/monday/webhook-events", (req, res) => {
+  const limitRaw = req.query.limit;
+  const parsedLimit = typeof limitRaw === "string" ? Number.parseInt(limitRaw, 10) : 20;
+  const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 20;
+
+  res.json({ events: webhookDebugEvents.slice(0, limit) });
 });
 
 apiRouter.get("/jira/accounts", (_req, res) => {
@@ -298,45 +350,107 @@ apiRouter.post("/monday/webhook", async (req, res) => {
     asText(event.itemId) ||
     asText(event.item_id) ||
     asText(event.pulseid);
+  const eventColumnId = extractEventColumnId(event);
+  const statusLabel = extractStatusLabelFromEvent(event);
 
   if (boardId && itemId) {
     try {
       const mapping = await getBoardMapping(boardId);
       if (!mapping) {
+        addWebhookDebugEvent({
+          at: new Date().toISOString(),
+          boardId,
+          itemId,
+          eventColumnId,
+          statusLabel,
+          decision: "skipped",
+          details: "No board mapping"
+        });
         res.status(202).json({ received: true, skipped: "No board mapping" });
         return;
       }
 
       if (mapping.syncTrigger === "manual") {
+        addWebhookDebugEvent({
+          at: new Date().toISOString(),
+          boardId,
+          itemId,
+          eventColumnId,
+          statusLabel,
+          decision: "skipped",
+          details: "Manual trigger mode"
+        });
         res.status(202).json({ received: true, skipped: "Manual trigger mode" });
         return;
       }
 
-      const eventColumnId = asText(event.columnId) || asText(event.column_id);
-      if (!eventColumnId) {
-        res.status(202).json({ received: true, skipped: "Not a column change event" });
-        return;
-      }
-
       if (mapping.statusColumnId && eventColumnId !== mapping.statusColumnId) {
+        addWebhookDebugEvent({
+          at: new Date().toISOString(),
+          boardId,
+          itemId,
+          eventColumnId,
+          statusLabel,
+          decision: "skipped",
+          details: `Different column (${eventColumnId || "unknown"})`
+        });
         res.status(202).json({ received: true, skipped: "Different column" });
         return;
       }
 
-      const statusLabel = extractStatusLabelFromEvent(event);
       if (
         mapping.triggerStatusLabel &&
+        statusLabel &&
         statusLabel.trim().toLowerCase() !== mapping.triggerStatusLabel.trim().toLowerCase()
       ) {
+        addWebhookDebugEvent({
+          at: new Date().toISOString(),
+          boardId,
+          itemId,
+          eventColumnId,
+          statusLabel,
+          decision: "skipped",
+          details: `Status mismatch (${statusLabel})`
+        });
         res.status(202).json({ received: true, skipped: "Status label mismatch" });
         return;
       }
 
-      await syncMondayItemToJira({ boardId, itemId, keepSynced: mapping.keepSynced });
+      const result = await syncMondayItemToJira({ boardId, itemId, keepSynced: mapping.keepSynced });
+      addWebhookDebugEvent({
+        at: new Date().toISOString(),
+        boardId,
+        itemId,
+        eventColumnId,
+        statusLabel,
+        decision: "synced",
+        details: `Issue ${result.issueKey} (created=${String(result.created)}, attachments=${String(
+          result.attachmentCount
+        )})`
+      });
     } catch (error) {
       const details = error instanceof Error ? error.message : "Unknown error";
+      addWebhookDebugEvent({
+        at: new Date().toISOString(),
+        boardId,
+        itemId,
+        eventColumnId,
+        statusLabel,
+        decision: "error",
+        details
+      });
       console.error("Webhook sync failed", { boardId, itemId, details });
     }
+  } else {
+    addWebhookDebugEvent({
+      at: new Date().toISOString(),
+      boardId,
+      itemId,
+      eventColumnId,
+      statusLabel,
+      decision: "ignored",
+      details: "Missing boardId or itemId in webhook payload"
+    });
   }
 
   res.status(202).json({ received: true });
