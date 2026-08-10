@@ -40,6 +40,17 @@ type MondayBoardColumnsResponse = {
   }>;
 };
 
+type MondayBoardSyncColumnsResponse = {
+  boards: Array<{
+    id: string;
+    columns: Array<{
+      id: string;
+      title: string;
+      type: string;
+    }>;
+  }>;
+};
+
 type MondayItemSyncResponse = {
   items: Array<{
     id: string;
@@ -51,8 +62,14 @@ type MondayItemSyncResponse = {
     assets: Array<{
       id: string;
       name: string;
-          public_url: string | null;
+      public_url: string | null;
       file_extension: string;
+    }>;
+    column_values: Array<{
+      id: string;
+      type: string;
+      text: string;
+      value: string;
     }>;
   }>;
 };
@@ -68,12 +85,29 @@ export type MondaySyncItem = {
     publicUrl: string;
     fileExtension: string;
   }>;
+  columnValues: Array<{
+    id: string;
+    type: string;
+    text: string;
+    value: string;
+  }>;
 };
 
 export type MondayStatusColumn = {
   id: string;
   title: string;
   labels: string[];
+};
+
+export type MondaySyncColumn = {
+  id: string;
+  title: string;
+  type: string;
+};
+
+export type MondaySyncColumns = {
+  nameColumns: MondaySyncColumn[];
+  fileColumns: MondaySyncColumn[];
 };
 
 function parseStatusLabels(settingsRaw: string): string[] {
@@ -192,6 +226,12 @@ export async function getMondayItemForSync(itemId: string): Promise<MondaySyncIt
           public_url
           file_extension
         }
+        column_values {
+          id
+          type
+          text
+          value
+        }
       }
     }
   `;
@@ -213,6 +253,12 @@ export async function getMondayItemForSync(itemId: string): Promise<MondaySyncIt
       name: asset.name,
       publicUrl: asset.public_url ?? "",
       fileExtension: asset.file_extension
+    })),
+    columnValues: (item.column_values ?? []).map((column) => ({
+      id: column.id,
+      type: column.type,
+      text: column.text ?? "",
+      value: column.value ?? ""
     }))
   };
 }
@@ -246,4 +292,38 @@ export async function getMondayBoardStatusColumns(boardId: string): Promise<Mond
       title: column.title,
       labels: parseStatusLabels(column.settings_str)
     }));
+}
+
+export async function getMondayBoardSyncColumns(boardId: string): Promise<MondaySyncColumns> {
+  const query = `
+    query ($boardId: [ID!]) {
+      boards(ids: $boardId) {
+        id
+        columns {
+          id
+          title
+          type
+        }
+      }
+    }
+  `;
+
+  const data = await mondayGraphql<MondayBoardSyncColumnsResponse>(query, { boardId: [boardId] });
+  const board = data.boards[0];
+
+  if (!board) {
+    throw new Error("Board not found or not accessible with this token.");
+  }
+
+  const nameColumnTypes = new Set(["name", "text", "long-text"]);
+  const fileColumnTypes = new Set(["file"]);
+
+  return {
+    nameColumns: board.columns
+      .filter((column) => nameColumnTypes.has(column.type))
+      .map((column) => ({ id: column.id, title: column.title, type: column.type })),
+    fileColumns: board.columns
+      .filter((column) => fileColumnTypes.has(column.type))
+      .map((column) => ({ id: column.id, title: column.title, type: column.type }))
+  };
 }

@@ -61,6 +61,39 @@
           </label>
         </fieldset>
 
+        <fieldset class="rule-box">
+          <legend>Field mapping</legend>
+
+          <label for="nameSourceSelect">Jira issue name source</label>
+          <select id="nameSourceSelect">
+            <option value="item_name">Monday item name</option>
+            <option value="text_column">Specific text column</option>
+          </select>
+
+          <label for="nameColumnIdSelect">Name column</label>
+          <select id="nameColumnIdSelect">
+            <option value="">Select name column</option>
+          </select>
+
+          <label for="nameTranslationsInput">Name translation rules (JSON, optional)</label>
+          <textarea
+            id="nameTranslationsInput"
+            rows="4"
+            placeholder='{"AX":"Axopar","NB":"Neuboot"}'
+          ></textarea>
+
+          <label for="attachmentSourceSelect">Attachment source</label>
+          <select id="attachmentSourceSelect">
+            <option value="item_assets">All item files/images</option>
+            <option value="file_column">Specific file column</option>
+          </select>
+
+          <label for="attachmentColumnIdSelect">Attachment file column</label>
+          <select id="attachmentColumnIdSelect">
+            <option value="">Select file column</option>
+          </select>
+        </fieldset>
+
         <button id="saveButton" type="button" disabled>Save board mapping</button>
 
         <p id="status" class="status" role="status" aria-live="polite"></p>

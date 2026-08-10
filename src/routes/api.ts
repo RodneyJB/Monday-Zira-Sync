@@ -5,6 +5,7 @@ import { config } from "../config.js";
 import { getBoardMapping, saveBoardMapping } from "../services/mappingStore.js";
 import { listJiraProjects } from "../services/jiraService.js";
 import {
+  getMondayBoardSyncColumns,
   getMondayBoardStatusColumns,
   getMondayBoardSummary,
   getMondayMe
@@ -23,6 +24,29 @@ const optionalTextField = z.preprocess(
   z.string().optional()
 );
 
+const optionalTranslationMap = z.preprocess(
+  (value) => {
+    if (!value || value === "") {
+      return undefined;
+    }
+
+    if (typeof value === "object") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+
+    return value;
+  },
+  z.record(z.string(), z.string()).optional()
+);
+
 const saveMappingSchema = z.object({
   boardId: z.string().min(1),
   accountId: z.string().min(1),
@@ -31,7 +55,12 @@ const saveMappingSchema = z.object({
   syncTrigger: z.enum(["manual", "status_change"]).default("manual"),
   statusColumnId: optionalTextField,
   triggerStatusLabel: optionalTextField,
-  keepSynced: z.boolean().default(true)
+  keepSynced: z.boolean().default(true),
+  nameSource: z.enum(["item_name", "text_column"]).default("item_name"),
+  nameColumnId: optionalTextField,
+  attachmentSource: z.enum(["item_assets", "file_column"]).default("item_assets"),
+  attachmentColumnId: optionalTextField,
+  nameTranslations: optionalTranslationMap.default({})
 });
 
 const syncItemSchema = z.object({
@@ -127,6 +156,23 @@ apiRouter.get("/monday/status-columns", async (req, res) => {
   } catch (error) {
     const details = error instanceof Error ? error.message : "Unknown error";
     res.status(502).json({ error: "Could not fetch Monday status columns", details });
+  }
+});
+
+apiRouter.get("/monday/sync-columns", async (req, res) => {
+  const boardId = req.query.boardId;
+
+  if (typeof boardId !== "string" || boardId.length === 0) {
+    res.status(400).json({ error: "boardId query parameter is required" });
+    return;
+  }
+
+  try {
+    const columns = await getMondayBoardSyncColumns(boardId);
+    res.json({ columns });
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: "Could not fetch Monday sync columns", details });
   }
 });
 

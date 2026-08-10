@@ -14,6 +14,80 @@ export type SyncResult = {
   attachmentCount: number;
 };
 
+function applyNameTranslations(name: string, translations: Record<string, string>): string {
+  let output = name;
+  for (const [from, to] of Object.entries(translations)) {
+    if (!from) {
+      continue;
+    }
+
+    output = output.split(from).join(to);
+  }
+
+  return output;
+}
+
+function resolveSummaryFromMapping(
+  mondayItem: Awaited<ReturnType<typeof getMondayItemForSync>>,
+  mapping: Awaited<ReturnType<typeof getBoardMapping>>
+): string {
+  const baseName =
+    mapping?.nameSource === "text_column" && mapping.nameColumnId
+      ? mondayItem.columnValues.find((column) => column.id === mapping.nameColumnId)?.text || mondayItem.name
+      : mondayItem.name;
+
+  const translated = applyNameTranslations(baseName, mapping?.nameTranslations ?? {});
+  return translated.trim() || mondayItem.name;
+}
+
+function extractAssetIdsFromFileColumnValue(rawValue: string): string[] {
+  if (!rawValue) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as {
+      files?: Array<Record<string, unknown>>;
+      assets?: Array<Record<string, unknown>>;
+    };
+
+    const entries = [...(parsed.files ?? []), ...(parsed.assets ?? [])];
+    return entries
+      .map((entry) => {
+        const value = entry.assetId ?? entry.asset_id ?? entry.id;
+        if (typeof value === "number") {
+          return String(value);
+        }
+
+        if (typeof value === "string") {
+          return value;
+        }
+
+        return "";
+      })
+      .filter((entry) => entry.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function resolveAssetsFromMapping(
+  mondayItem: Awaited<ReturnType<typeof getMondayItemForSync>>,
+  mapping: Awaited<ReturnType<typeof getBoardMapping>>
+) {
+  if (mapping?.attachmentSource !== "file_column" || !mapping.attachmentColumnId) {
+    return mondayItem.assets;
+  }
+
+  const fileColumn = mondayItem.columnValues.find((column) => column.id === mapping.attachmentColumnId);
+  if (!fileColumn?.value) {
+    return [];
+  }
+
+  const selectedAssetIds = new Set(extractAssetIdsFromFileColumnValue(fileColumn.value));
+  return mondayItem.assets.filter((asset) => selectedAssetIds.has(asset.id));
+}
+
 export async function syncMondayItemToJira(input: {
   boardId: string;
   itemId: string;
@@ -42,6 +116,8 @@ export async function syncMondayItemToJira(input: {
   }
 
   const mondayItem = await getMondayItemForSync(itemId);
+  const summary = resolveSummaryFromMapping(mondayItem, mapping);
+  const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
   let issueKey = existing?.issueKey;
   let created = false;
 
@@ -49,7 +125,7 @@ export async function syncMondayItemToJira(input: {
     const createdIssue = await createJiraIssue({
       account: jiraAccount,
       projectKey: mapping.projectKey,
-      summary: mondayItem.name,
+      summary,
       description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}.`
     });
 
@@ -59,7 +135,7 @@ export async function syncMondayItemToJira(input: {
     await updateJiraIssueSummary({
       account: jiraAccount,
       issueIdOrKey: issueKey,
-      summary: mondayItem.name,
+      summary,
       description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}.`
     });
   }
@@ -68,7 +144,7 @@ export async function syncMondayItemToJira(input: {
   const alreadyUploadedAssetIds = new Set(existing?.uploadedAssetIds ?? []);
   const uploadedAssetIds = [...alreadyUploadedAssetIds];
 
-  for (const asset of mondayItem.assets) {
+  for (const asset of assetsToSync) {
     if (!asset.publicUrl || alreadyUploadedAssetIds.has(asset.id)) {
       continue;
     }

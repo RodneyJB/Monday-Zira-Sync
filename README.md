@@ -87,6 +87,7 @@ Health endpoint:
 - `GET /api/monday/me`
 - `GET /api/monday/board?boardId=<boardId>`
 - `GET /api/monday/status-columns?boardId=<boardId>`
+- `GET /api/monday/sync-columns?boardId=<boardId>`
 - `GET /api/jira/accounts`
 - `GET /api/jira/projects?accountId=main`
 - `GET /api/mapping?boardId=<boardId>`
@@ -100,6 +101,14 @@ Mapping payload rule fields:
 - `statusColumnId`: Monday status column ID (for status_change mode)
 - `triggerStatusLabel`: Optional status value filter (for example `Done`)
 - `keepSynced`: if true, existing Jira issue keeps updating when the rule matches
+
+Mapping payload field-mapping options:
+
+- `nameSource`: `item_name` or `text_column`
+- `nameColumnId`: Monday text/name column id (used when `nameSource=text_column`)
+- `attachmentSource`: `item_assets` or `file_column`
+- `attachmentColumnId`: Monday file column id (used when `attachmentSource=file_column`)
+- `nameTranslations`: optional JSON object for replacements, example: `{"AX":"Axopar","NB":"Neuboot"}`
 
 Manual sync payload example:
 

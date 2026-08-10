@@ -4,6 +4,11 @@ const syncTriggerSelect = document.getElementById("syncTriggerSelect");
 const statusColumnIdInput = document.getElementById("statusColumnIdInput");
 const triggerStatusLabelInput = document.getElementById("triggerStatusLabelInput");
 const keepSyncedCheckbox = document.getElementById("keepSyncedCheckbox");
+const nameSourceSelect = document.getElementById("nameSourceSelect");
+const nameColumnIdSelect = document.getElementById("nameColumnIdSelect");
+const nameTranslationsInput = document.getElementById("nameTranslationsInput");
+const attachmentSourceSelect = document.getElementById("attachmentSourceSelect");
+const attachmentColumnIdSelect = document.getElementById("attachmentColumnIdSelect");
 const saveButton = document.getElementById("saveButton");
 const boardIdLabel = document.getElementById("boardIdLabel");
 const statusEl = document.getElementById("status");
@@ -11,6 +16,7 @@ const statusEl = document.getElementById("status");
 let boardId = "";
 let accounts = [];
 let statusColumns = [];
+let syncColumns = { nameColumns: [], fileColumns: [] };
 
 function setStatus(message, type = "") {
   statusEl.textContent = message;
@@ -23,8 +29,13 @@ function setSaveEnabled() {
 
 function refreshRuleFieldState() {
   const statusMode = syncTriggerSelect.value === "status_change";
+  const nameColumnMode = nameSourceSelect.value === "text_column";
+  const fileColumnMode = attachmentSourceSelect.value === "file_column";
+
   statusColumnIdInput.disabled = !statusMode;
   triggerStatusLabelInput.disabled = !statusMode;
+  nameColumnIdSelect.disabled = !nameColumnMode;
+  attachmentColumnIdSelect.disabled = !fileColumnMode;
 }
 
 function populateStatusColumnOptions(selectedColumnId = "") {
@@ -59,6 +70,42 @@ function populateStatusLabelOptions(columnId, selectedLabel = "") {
   }
 }
 
+function populateNameColumnOptions(selectedColumnId = "") {
+  nameColumnIdSelect.innerHTML = "";
+
+  if (syncColumns.nameColumns.length === 0) {
+    nameColumnIdSelect.append(new Option("No text columns found", ""));
+    return;
+  }
+
+  nameColumnIdSelect.append(new Option("Select name column", ""));
+  for (const column of syncColumns.nameColumns) {
+    nameColumnIdSelect.append(new Option(`${column.title} (${column.id})`, column.id));
+  }
+
+  if (selectedColumnId) {
+    nameColumnIdSelect.value = selectedColumnId;
+  }
+}
+
+function populateAttachmentColumnOptions(selectedColumnId = "") {
+  attachmentColumnIdSelect.innerHTML = "";
+
+  if (syncColumns.fileColumns.length === 0) {
+    attachmentColumnIdSelect.append(new Option("No file columns found", ""));
+    return;
+  }
+
+  attachmentColumnIdSelect.append(new Option("Select file column", ""));
+  for (const column of syncColumns.fileColumns) {
+    attachmentColumnIdSelect.append(new Option(`${column.title} (${column.id})`, column.id));
+  }
+
+  if (selectedColumnId) {
+    attachmentColumnIdSelect.value = selectedColumnId;
+  }
+}
+
 async function loadStatusColumns() {
   if (!boardId) {
     return;
@@ -68,6 +115,17 @@ async function loadStatusColumns() {
   statusColumns = data.columns || [];
   populateStatusColumnOptions();
   populateStatusLabelOptions("");
+}
+
+async function loadSyncColumns() {
+  if (!boardId) {
+    return;
+  }
+
+  const data = await fetchJson(`/api/monday/sync-columns?boardId=${encodeURIComponent(boardId)}`);
+  syncColumns = data.columns || { nameColumns: [], fileColumns: [] };
+  populateNameColumnOptions();
+  populateAttachmentColumnOptions();
 }
 
 function extractBoardId(context) {
@@ -160,6 +218,14 @@ async function loadExistingMapping() {
   populateStatusColumnOptions(mapping.statusColumnId || "");
   populateStatusLabelOptions(mapping.statusColumnId || "", mapping.triggerStatusLabel || "");
   keepSyncedCheckbox.checked = mapping.keepSynced !== false;
+  nameSourceSelect.value = mapping.nameSource || "item_name";
+  populateNameColumnOptions(mapping.nameColumnId || "");
+  attachmentSourceSelect.value = mapping.attachmentSource || "item_assets";
+  populateAttachmentColumnOptions(mapping.attachmentColumnId || "");
+  nameTranslationsInput.value =
+    mapping.nameTranslations && Object.keys(mapping.nameTranslations).length > 0
+      ? JSON.stringify(mapping.nameTranslations, null, 2)
+      : "";
   refreshRuleFieldState();
   setStatus(`Current mapping: ${mapping.projectName} (${mapping.projectKey})`, "ok");
   setSaveEnabled();
@@ -187,6 +253,8 @@ accountSelect.addEventListener("change", async () => {
 
 projectSelect.addEventListener("change", setSaveEnabled);
 syncTriggerSelect.addEventListener("change", refreshRuleFieldState);
+nameSourceSelect.addEventListener("change", refreshRuleFieldState);
+attachmentSourceSelect.addEventListener("change", refreshRuleFieldState);
 statusColumnIdInput.addEventListener("change", () => {
   populateStatusLabelOptions(statusColumnIdInput.value);
 });
@@ -199,6 +267,28 @@ saveButton.addEventListener("click", async () => {
   const statusColumnId = statusColumnIdInput.value.trim();
   const triggerStatusLabel = triggerStatusLabelInput.value.trim();
   const keepSynced = keepSyncedCheckbox.checked;
+  const nameSource = nameSourceSelect.value;
+  const nameColumnId = nameColumnIdSelect.value.trim();
+  const attachmentSource = attachmentSourceSelect.value;
+  const attachmentColumnId = attachmentColumnIdSelect.value.trim();
+
+  let nameTranslations = {};
+  const translationInput = nameTranslationsInput.value.trim();
+  if (translationInput) {
+    try {
+      const parsed = JSON.parse(translationInput);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Translation rules must be a JSON object.");
+      }
+
+      nameTranslations = Object.fromEntries(
+        Object.entries(parsed).map(([from, to]) => [String(from), String(to)])
+      );
+    } catch {
+      setStatus("Name translation rules must be valid JSON object text.", "error");
+      return;
+    }
+  }
 
   if (!(boardId && accountId && projectKey)) {
     setStatus("Please select account and project.", "error");
@@ -217,13 +307,18 @@ saveButton.addEventListener("click", async () => {
         projectKey,
         projectName,
         syncTrigger,
-        statusColumnId,
-        triggerStatusLabel,
-        keepSynced
+        statusColumnId: syncTrigger === "status_change" ? statusColumnId : "",
+        triggerStatusLabel: syncTrigger === "status_change" ? triggerStatusLabel : "",
+        keepSynced,
+        nameSource,
+        nameColumnId: nameSource === "text_column" ? nameColumnId : "",
+        attachmentSource,
+        attachmentColumnId: attachmentSource === "file_column" ? attachmentColumnId : "",
+        nameTranslations
       })
     });
 
-    setStatus("Saved. Sync project and rule are now active for this board.", "ok");
+    setStatus("Saved. Sync project, rule, and field mapping are now active.", "ok");
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Could not save mapping", "error");
   } finally {
@@ -252,9 +347,10 @@ saveButton.addEventListener("click", async () => {
 
         try {
           await loadStatusColumns();
+          await loadSyncColumns();
           await loadExistingMapping();
         } catch {
-          setStatus("Could not load mapping or status columns for this board.", "error");
+          setStatus("Could not load board columns or existing mapping.", "error");
         }
       });
 
@@ -270,9 +366,10 @@ saveButton.addEventListener("click", async () => {
 
         try {
           await loadStatusColumns();
+          await loadSyncColumns();
           await loadExistingMapping();
         } catch {
-          setStatus("Could not load mapping or status columns for this board.", "error");
+          setStatus("Could not load board columns or existing mapping.", "error");
         }
       });
     } else {
