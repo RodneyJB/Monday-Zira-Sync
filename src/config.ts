@@ -11,6 +11,7 @@ const jiraAccountSchema = z.object({
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
+  DATA_DIR: z.string().default("data"),
   MONDAY_API_TOKEN: z.string().optional(),
   MONDAY_API_VERSION: z.string().default("2025-04"),
   MONDAY_ACCOUNT_BASE_URL: z.url().default("https://bootepolch.monday.com"),

@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+import { config } from "../config.js";
+
 export type SyncedItemRecord = {
   boardId: string;
   itemId: string;
@@ -10,7 +12,7 @@ export type SyncedItemRecord = {
   syncedAt: string;
 };
 
-const storagePath = resolve(process.cwd(), "data", "synced-items.json");
+const storagePath = resolve(process.cwd(), config.DATA_DIR, "synced-items.json");
 let loaded = false;
 let cache = new Map<string, SyncedItemRecord>();
 

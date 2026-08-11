@@ -77,6 +77,7 @@ This repo includes `render.yaml` for a web service.
 1. Push code to GitHub.
 2. In Render, create a **Blueprint** or **Web Service** from this repo.
 3. Add env var:
+   - `DATA_DIR` (optional locally; set to a persistent path in production, e.g. `/var/data` on Render)
    - `MONDAY_API_TOKEN` (required for backend Monday API calls)
    - `MONDAY_API_VERSION` (optional, default is `2025-04`)
    - `MONDAY_ACCOUNT_BASE_URL` (optional, set to your account URL for Jira backlinks, e.g. `https://bootepolch.monday.com`)
@@ -140,4 +141,9 @@ Manual sync payload example:
 
 ## Important note
 
-Current mapping persistence uses a local JSON file (`data/mappings.json`). On Render this is ephemeral across restarts/deployments. For production persistence, next step is to move mappings to a database (Render Postgres is a good fit).
+Board mappings and sync state are persisted by board ID in JSON files under `DATA_DIR`:
+
+- `mappings.json`
+- `synced-items.json`
+
+If `DATA_DIR` points to ephemeral storage, settings will reset after restarts/deployments. The provided `render.yaml` mounts a persistent disk at `/var/data` and sets `DATA_DIR=/var/data` so mappings survive restarts.

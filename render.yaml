@@ -6,11 +6,17 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     autoDeploy: true
+    disk:
+      name: monday-zira-sync-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
+      - key: DATA_DIR
+        value: /var/data
       - key: MONDAY_API_TOKEN
         sync: false
       - key: MONDAY_API_VERSION

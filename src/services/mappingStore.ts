@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+import { config } from "../config.js";
+
 export type BoardMapping = {
   boardId: string;
   boardViewId?: string;
@@ -20,7 +22,7 @@ export type BoardMapping = {
   updatedAt: string;
 };
 
-const storagePath = resolve(process.cwd(), "data", "mappings.json");
+const storagePath = resolve(process.cwd(), config.DATA_DIR, "mappings.json");
 let cache = new Map<string, BoardMapping>();
 let loaded = false;
 
