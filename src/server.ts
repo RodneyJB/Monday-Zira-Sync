@@ -9,7 +9,7 @@ import { apiRouter } from "./routes/api.js";
 const app = express();
 const publicDir = path.resolve(process.cwd(), "public");
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "1mb", strict: false }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text({ type: "text/plain" }));
 app.use(express.static(publicDir));
