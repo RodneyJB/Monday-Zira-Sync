@@ -16,7 +16,7 @@ services:
       - key: MONDAY_API_VERSION
         value: 2025-04
       - key: MONDAY_ACCOUNT_BASE_URL
-        value: https://monday.com
+        value: https://bootepolch.monday.com
       - key: JIRA_ACCOUNTS_JSON
         sync: false
       - key: MONDAY_SIGNING_SECRET

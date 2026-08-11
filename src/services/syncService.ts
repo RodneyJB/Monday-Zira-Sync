@@ -187,9 +187,7 @@ export async function syncMondayItemToJira(input: {
   const mondayItem = await getMondayItemForSync(itemId);
   const summary = await resolveSummaryFromMapping(mondayItem, mapping);
   const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
-  const mondayItemUrl = mapping?.boardViewId
-    ? `${config.MONDAY_ACCOUNT_BASE_URL.replace(/\/$/, "")}/boards/${mondayItem.boardId}/views/${mapping.boardViewId}/pulses/${mondayItem.id}`
-    : buildMondayItemUrl(mondayItem.boardId, mondayItem.id);
+  const mondayItemUrl = buildMondayItemUrl(mondayItem.boardId, mondayItem.id);
   const liveStatusLabel = mapping.statusColumnId
     ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""
     : "";
