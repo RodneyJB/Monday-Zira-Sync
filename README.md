@@ -65,6 +65,11 @@ https://monday-zira-sync.onrender.com/
    - Choose Jira project (space)
    - Click **Save board mapping**
 
+7. Add board automation webhook in Monday:
+   - Recipe: **When Issues AXO changes to anything, send a webhook**
+   - URL: `https://monday-zira-sync.onrender.com/api/monday/webhook`
+   - First create uses status label `Sync Jira`; once synced, later status changes continue updates.
+
 ## Render deployment
 
 This repo includes `render.yaml` for a web service.

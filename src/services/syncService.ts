@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import {
   createJiraIssue,
+  listJiraPriorities,
   updateJiraIssueSummary,
   uploadJiraAttachmentFromUrl
 } from "./jiraService.js";
@@ -93,10 +94,58 @@ function resolveAssetsFromMapping(
   return mondayItem.assets.filter((asset) => selectedAssetIds.has(asset.id));
 }
 
+function resolvePriorityFromStatusLabel(input: {
+  statusLabel: string;
+  priorityNames: string[];
+}): string | undefined {
+  const status = input.statusLabel.trim();
+  if (!status) {
+    return undefined;
+  }
+
+  const priorities = input.priorityNames;
+  const lowerStatus = status.toLowerCase();
+
+  const exact = priorities.find((priority) => priority.toLowerCase() === lowerStatus);
+  if (exact) {
+    return exact;
+  }
+
+  const pickFirstAvailable = (choices: string[]): string | undefined => {
+    for (const choice of choices) {
+      const found = priorities.find((priority) => priority.toLowerCase() === choice);
+      if (found) {
+        return found;
+      }
+    }
+
+    return undefined;
+  };
+
+  if (/(done|closed|resolved|finish)/i.test(status)) {
+    return pickFirstAvailable(["low", "lowest", "medium"]);
+  }
+
+  if (/(sync jira|urgent|critical|blocker|hotfix)/i.test(status)) {
+    return pickFirstAvailable(["highest", "high", "medium"]);
+  }
+
+  if (/(progress|working|doing|wip)/i.test(status)) {
+    return pickFirstAvailable(["high", "medium"]);
+  }
+
+  if (/(todo|to do|open|ready)/i.test(status)) {
+    return pickFirstAvailable(["medium", "high", "low"]);
+  }
+
+  return pickFirstAvailable(["medium", "high", "low", "highest", "lowest"]);
+}
+
 export async function syncMondayItemToJira(input: {
   boardId: string;
   itemId: string;
   keepSynced?: boolean;
+  statusLabel?: string;
 }): Promise<SyncResult> {
   const { boardId, itemId } = input;
   const keepSynced = input.keepSynced ?? true;
@@ -123,6 +172,16 @@ export async function syncMondayItemToJira(input: {
   const mondayItem = await getMondayItemForSync(itemId);
   const summary = await resolveSummaryFromMapping(mondayItem, mapping);
   const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
+  const fallbackStatusLabel = mapping.statusColumnId
+    ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""
+    : "";
+  const statusLabel = (input.statusLabel || fallbackStatusLabel).trim();
+  const jiraPriorities = await listJiraPriorities(jiraAccount);
+  const priorityName = resolvePriorityFromStatusLabel({
+    statusLabel,
+    priorityNames: jiraPriorities.map((entry) => entry.name)
+  });
+
   let issueKey = existing?.issueKey;
   let created = false;
 
@@ -131,7 +190,8 @@ export async function syncMondayItemToJira(input: {
       account: jiraAccount,
       projectKey: mapping.projectKey,
       summary,
-      description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}.`
+      description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+      priorityName
     });
 
     issueKey = createdIssue.key;
@@ -141,7 +201,8 @@ export async function syncMondayItemToJira(input: {
       account: jiraAccount,
       issueIdOrKey: issueKey,
       summary,
-      description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}.`
+      description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+      priorityName
     });
   }
 

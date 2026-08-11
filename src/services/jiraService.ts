@@ -8,6 +8,11 @@ export type JiraProject = {
   name: string;
 };
 
+export type JiraPriority = {
+  id: string;
+  name: string;
+};
+
 export type JiraCreatedIssue = {
   id: string;
   key: string;
@@ -21,6 +26,11 @@ type JiraSearchResponse = {
     name: string;
   }>;
 };
+
+type JiraPriorityResponse = Array<{
+  id: string;
+  name: string;
+}>;
 
 function buildAuthHeader(account: JiraAccountConfig): string {
   const token = Buffer.from(`${account.email}:${account.apiToken}`).toString("base64");
@@ -55,46 +65,67 @@ export async function createJiraIssue(input: {
   projectKey: string;
   summary: string;
   description?: string;
+  priorityName?: string;
 }): Promise<JiraCreatedIssue> {
-  const { account, projectKey, summary, description } = input;
+  const { account, projectKey, summary, description, priorityName } = input;
 
   const url = new URL("/rest/api/3/issue", account.baseUrl);
-  const response = await axios.post<JiraCreatedIssue>(
-    url.toString(),
-    {
-      fields: {
-        project: {
-          key: projectKey
-        },
-        issuetype: {
-          name: "Task"
-        },
-        summary,
-        description: {
-          type: "doc",
-          version: 1,
-          content: [
-            {
-              type: "paragraph",
-              content: [
-                {
-                  type: "text",
-                  text: description ?? "Created automatically from Monday board item."
-                }
-              ]
+  const buildPayload = (includePriority: boolean) => ({
+    fields: {
+      project: {
+        key: projectKey
+      },
+      issuetype: {
+        name: "Task"
+      },
+      summary,
+      ...(includePriority && priorityName
+        ? {
+            priority: {
+              name: priorityName
             }
-          ]
-        }
+          }
+        : {}),
+      description: {
+        type: "doc",
+        version: 1,
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: description ?? "Created automatically from Monday board item."
+              }
+            ]
+          }
+        ]
       }
-    },
-    {
+    }
+  });
+
+  let response;
+  try {
+    response = await axios.post<JiraCreatedIssue>(url.toString(), buildPayload(true), {
       headers: {
         ...jiraHeaders(account),
         "Content-Type": "application/json"
       },
       timeout: 15000
+    });
+  } catch (error) {
+    if (priorityName) {
+      response = await axios.post<JiraCreatedIssue>(url.toString(), buildPayload(false), {
+        headers: {
+          ...jiraHeaders(account),
+          "Content-Type": "application/json"
+        },
+        timeout: 15000
+      });
+    } else {
+      throw error;
     }
-  );
+  }
 
   return response.data;
 }
@@ -104,40 +135,75 @@ export async function updateJiraIssueSummary(input: {
   issueIdOrKey: string;
   summary: string;
   description?: string;
+  priorityName?: string;
 }): Promise<void> {
-  const { account, issueIdOrKey, summary, description } = input;
+  const { account, issueIdOrKey, summary, description, priorityName } = input;
   const url = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
 
-  await axios.put(
-    url.toString(),
-    {
-      fields: {
-        summary,
-        description: {
-          type: "doc",
-          version: 1,
-          content: [
-            {
-              type: "paragraph",
-              content: [
-                {
-                  type: "text",
-                  text: description ?? "Updated automatically from Monday board item."
-                }
-              ]
+  const buildPayload = (includePriority: boolean) => ({
+    fields: {
+      summary,
+      ...(includePriority && priorityName
+        ? {
+            priority: {
+              name: priorityName
             }
-          ]
-        }
+          }
+        : {}),
+      description: {
+        type: "doc",
+        version: 1,
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: description ?? "Updated automatically from Monday board item."
+              }
+            ]
+          }
+        ]
       }
-    },
-    {
+    }
+  });
+
+  try {
+    await axios.put(url.toString(), buildPayload(true), {
       headers: {
         ...jiraHeaders(account),
         "Content-Type": "application/json"
       },
       timeout: 15000
+    });
+  } catch (error) {
+    if (priorityName) {
+      await axios.put(url.toString(), buildPayload(false), {
+        headers: {
+          ...jiraHeaders(account),
+          "Content-Type": "application/json"
+        },
+        timeout: 15000
+      });
+      return;
     }
-  );
+
+    throw error;
+  }
+}
+
+export async function listJiraPriorities(account: JiraAccountConfig): Promise<JiraPriority[]> {
+  const url = new URL("/rest/api/3/priority", account.baseUrl);
+
+  const response = await axios.get<JiraPriorityResponse>(url.toString(), {
+    headers: jiraHeaders(account),
+    timeout: 15000
+  });
+
+  return response.data.map((entry) => ({
+    id: entry.id,
+    name: entry.name
+  }));
 }
 
 export async function uploadJiraAttachmentFromUrl(input: {

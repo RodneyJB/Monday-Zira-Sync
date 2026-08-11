@@ -60,6 +60,22 @@ h1 {
   color: var(--muted);
 }
 
+.notice {
+  margin: 12px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #b8d4ff;
+  border-radius: 12px;
+  background: #eef6ff;
+  color: #2a3d55;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.notice a {
+  color: #0d5ad5;
+  word-break: break-all;
+}
+
 .board-meta {
   display: inline-flex;
   gap: 8px;

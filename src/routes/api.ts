@@ -10,6 +10,7 @@ import {
   getMondayBoardSummary,
   getMondayMe
 } from "../services/mondayService.js";
+import { getSyncedItem } from "../services/syncStateStore.js";
 import { syncMondayItemToJira } from "../services/syncService.js";
 
 const optionalTextField = z.preprocess(
@@ -398,7 +399,11 @@ apiRouter.post("/monday/webhook", async (req, res) => {
         return;
       }
 
+      const existingSyncedItem = await getSyncedItem(boardId, itemId);
+      const shouldEnforceTriggerLabel = !(existingSyncedItem && mapping.keepSynced);
+
       if (
+        shouldEnforceTriggerLabel &&
         mapping.triggerStatusLabel &&
         statusLabel &&
         statusLabel.trim().toLowerCase() !== mapping.triggerStatusLabel.trim().toLowerCase()
@@ -416,7 +421,12 @@ apiRouter.post("/monday/webhook", async (req, res) => {
         return;
       }
 
-      const result = await syncMondayItemToJira({ boardId, itemId, keepSynced: mapping.keepSynced });
+      const result = await syncMondayItemToJira({
+        boardId,
+        itemId,
+        keepSynced: mapping.keepSynced,
+        statusLabel
+      });
       addWebhookDebugEvent({
         at: new Date().toISOString(),
         boardId,
