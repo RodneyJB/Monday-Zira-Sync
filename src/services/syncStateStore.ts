@@ -70,3 +70,23 @@ export async function setSyncedItem(input: {
 
   return record;
 }
+
+export async function clearSyncedItemsForBoard(boardId: string): Promise<number> {
+  await loadStore();
+
+  let removed = 0;
+  for (const key of cache.keys()) {
+    if (!key.startsWith(`${boardId}:`)) {
+      continue;
+    }
+
+    cache.delete(key);
+    removed += 1;
+  }
+
+  if (removed > 0) {
+    await persistStore();
+  }
+
+  return removed;
+}
