@@ -6,6 +6,7 @@ export type SyncedItemRecord = {
   itemId: string;
   issueKey: string;
   uploadedAssetIds: string[];
+  lastStatusLabel?: string;
   syncedAt: string;
 };
 
@@ -49,6 +50,7 @@ export async function setSyncedItem(input: {
   itemId: string;
   issueKey: string;
   uploadedAssetIds?: string[];
+  lastStatusLabel?: string;
 }): Promise<SyncedItemRecord> {
   await loadStore();
 
@@ -57,6 +59,7 @@ export async function setSyncedItem(input: {
   const record: SyncedItemRecord = {
     ...input,
     uploadedAssetIds: input.uploadedAssetIds ?? existing?.uploadedAssetIds ?? [],
+    lastStatusLabel: input.lastStatusLabel ?? existing?.lastStatusLabel,
     syncedAt: new Date().toISOString()
   };
 

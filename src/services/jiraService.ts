@@ -75,6 +75,11 @@ function slugifyStatus(status: string): string {
     .slice(0, 50);
 }
 
+function formatFallbackStatusLabel(status: string): string {
+  const slug = slugifyStatus(status);
+  return slug || "status";
+}
+
 function inferStatusCategory(statusLabel: string): string | null {
   const status = normalizeStatus(statusLabel);
 
@@ -325,7 +330,8 @@ async function transitionIssue(account: JiraAccountConfig, issueIdOrKey: string,
 async function replaceMondayStatusLabel(
   account: JiraAccountConfig,
   issueIdOrKey: string,
-  nextLabel: string
+  nextLabel: string,
+  previousLabel?: string
 ): Promise<void> {
   const issueUrl = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
   issueUrl.searchParams.set("fields", "labels");
@@ -336,7 +342,17 @@ async function replaceMondayStatusLabel(
   });
 
   const existingLabels = issueResponse.data.fields.labels ?? [];
-  const preservedLabels = existingLabels.filter((label) => !label.startsWith(mondayStatusLabelPrefix));
+  const preservedLabels = existingLabels.filter((label) => {
+    if (label.startsWith(mondayStatusLabelPrefix)) {
+      return false;
+    }
+
+    if (previousLabel && label === previousLabel) {
+      return false;
+    }
+
+    return true;
+  });
   const finalLabels = [...new Set([...preservedLabels, nextLabel])];
 
   const updateUrl = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
@@ -361,7 +377,8 @@ export async function applyJiraStatusFromMonday(input: {
   account: JiraAccountConfig;
   issueIdOrKey: string;
   statusLabel: string;
-}): Promise<{ action: "transitioned" | "labeled" | "skipped"; details: string }> {
+  previousStatusLabel?: string;
+}): Promise<{ action: "transitioned" | "labeled" | "skipped"; details: string; appliedLabel?: string }> {
   const statusLabel = input.statusLabel.trim();
   if (!statusLabel) {
     return { action: "skipped", details: "No status label available" };
@@ -415,10 +432,16 @@ export async function applyJiraStatusFromMonday(input: {
     }
   }
 
-  const fallbackLabel = `${mondayStatusLabelPrefix}${slugifyStatus(statusLabel)}`;
-  await replaceMondayStatusLabel(input.account, input.issueIdOrKey, fallbackLabel);
+  const fallbackLabel = formatFallbackStatusLabel(statusLabel);
+  await replaceMondayStatusLabel(
+    input.account,
+    input.issueIdOrKey,
+    fallbackLabel,
+    input.previousStatusLabel
+  );
   return {
     action: "labeled",
-    details: `No Jira status transition matched; set label ${fallbackLabel}`
+    details: `No Jira status transition matched; set label ${fallbackLabel}`,
+    appliedLabel: fallbackLabel
   };
 }
