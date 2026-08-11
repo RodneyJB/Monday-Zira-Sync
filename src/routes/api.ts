@@ -50,6 +50,7 @@ const optionalTranslationMap = z.preprocess(
 
 const saveMappingSchema = z.object({
   boardId: z.string().min(1),
+  boardViewId: optionalTextField,
   accountId: z.string().min(1),
   projectKey: z.string().min(1),
   projectName: z.string().min(1),

@@ -13,6 +13,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   MONDAY_API_TOKEN: z.string().optional(),
   MONDAY_API_VERSION: z.string().default("2025-04"),
+  MONDAY_ACCOUNT_BASE_URL: z.url().default("https://monday.com"),
   MONDAY_SIGNING_SECRET: z.string().optional(),
   JIRA_ACCOUNTS_JSON: z.string().optional()
 });

@@ -22,7 +22,9 @@ export type SyncResult = {
 };
 
 function buildMondayItemUrl(boardId: string, itemId: string): string {
-  return `https://monday.com/boards/${boardId}/pulses/${itemId}`;
+  const baseUrl = config.MONDAY_ACCOUNT_BASE_URL.replace(/\/$/, "");
+  const mapping = `boards/${boardId}/pulses/${itemId}`;
+  return `${baseUrl}/${mapping}`;
 }
 
 function applyNameTranslations(name: string, translations: Record<string, string>): string {
@@ -185,7 +187,9 @@ export async function syncMondayItemToJira(input: {
   const mondayItem = await getMondayItemForSync(itemId);
   const summary = await resolveSummaryFromMapping(mondayItem, mapping);
   const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
-  const mondayItemUrl = buildMondayItemUrl(mondayItem.boardId, mondayItem.id);
+  const mondayItemUrl = mapping?.boardViewId
+    ? `${config.MONDAY_ACCOUNT_BASE_URL.replace(/\/$/, "")}/boards/${mondayItem.boardId}/views/${mapping.boardViewId}/pulses/${mondayItem.id}`
+    : buildMondayItemUrl(mondayItem.boardId, mondayItem.id);
   const liveStatusLabel = mapping.statusColumnId
     ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""
     : "";

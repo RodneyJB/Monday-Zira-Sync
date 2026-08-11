@@ -15,6 +15,7 @@ const boardIdLabel = document.getElementById("boardIdLabel");
 const statusEl = document.getElementById("status");
 
 let boardId = "";
+let boardViewId = "";
 let accounts = [];
 let statusColumns = [];
 let syncColumns = { nameColumns: [], fileColumns: [] };
@@ -149,6 +150,26 @@ function extractBoardId(context) {
   return "";
 }
 
+function extractBoardViewId(context) {
+  if (!context) {
+    return "";
+  }
+
+  if (context.boardViewId) {
+    return String(context.boardViewId);
+  }
+
+  if (context.viewId) {
+    return String(context.viewId);
+  }
+
+  if (Array.isArray(context.boardViewIds) && context.boardViewIds.length > 0) {
+    return String(context.boardViewIds[0]);
+  }
+
+  return "";
+}
+
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
   const data = await response.json().catch(() => ({}));
@@ -215,6 +236,7 @@ async function loadExistingMapping() {
   accountSelect.value = mapping.accountId;
   await loadProjects(mapping.accountId);
   projectSelect.value = mapping.projectKey;
+  boardViewId = mapping.boardViewId || boardViewId;
   targetLanguageSelect.value = mapping.targetLanguage || "none";
   syncTriggerSelect.value = mapping.syncTrigger || "manual";
   populateStatusColumnOptions(mapping.statusColumnId || "");
@@ -306,6 +328,7 @@ saveButton.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         boardId,
+        boardViewId,
         accountId,
         projectKey,
         projectName,
@@ -346,6 +369,7 @@ saveButton.addEventListener("click", async () => {
         }
 
         boardId = nextBoardId;
+        boardViewId = extractBoardViewId(res?.data);
         boardIdLabel.textContent = boardId;
         setSaveEnabled();
 
@@ -365,6 +389,7 @@ saveButton.addEventListener("click", async () => {
         }
 
         boardId = nextBoardId;
+        boardViewId = extractBoardViewId(res?.data);
         boardIdLabel.textContent = boardId;
         setSaveEnabled();
 

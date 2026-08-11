@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 
 export type BoardMapping = {
   boardId: string;
+  boardViewId?: string;
   accountId: string;
   projectKey: string;
   projectName: string;
@@ -99,6 +100,7 @@ export async function getBoardMapping(boardId: string): Promise<BoardMapping | n
 
 export async function saveBoardMapping(input: {
   boardId: string;
+  boardViewId?: string;
   accountId: string;
   projectKey: string;
   projectName: string;

@@ -79,6 +79,7 @@ This repo includes `render.yaml` for a web service.
 3. Add env var:
    - `MONDAY_API_TOKEN` (required for backend Monday API calls)
    - `MONDAY_API_VERSION` (optional, default is `2025-04`)
+   - `MONDAY_ACCOUNT_BASE_URL` (optional, set to your account URL for Jira backlinks, e.g. `https://bootepolch.monday.com`)
    - `JIRA_ACCOUNTS_JSON` (required)
    - `MONDAY_SIGNING_SECRET` (optional now, useful for webhook hardening)
 4. Deploy.
