@@ -42,6 +42,10 @@ function isJiraLookupUnavailableError(error: unknown): boolean {
   return status === 404 || status === 405 || status === 410;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 const inFlightSyncs = new Map<string, Promise<SyncResult>>();
 
 function makeSyncKey(boardId: string, itemId: string): string {
@@ -235,7 +239,12 @@ async function runSyncMondayItemToJira(input: {
     ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""
     : "";
   const statusLabel = (liveStatusLabel || input.statusLabel || "").trim();
-  const jiraPriorities = await listJiraPriorities(jiraAccount);
+  let jiraPriorities;
+  try {
+    jiraPriorities = await listJiraPriorities(jiraAccount);
+  } catch (error) {
+    throw new Error(`Jira priorities lookup failed: ${errorMessage(error)}`);
+  }
   const priorityName = resolvePriorityFromStatusLabel({
     statusLabel,
     priorityNames: jiraPriorities.map((entry) => entry.name)
@@ -271,15 +280,20 @@ async function runSyncMondayItemToJira(input: {
   }
 
   if (!issueKey) {
-    const createdIssue = await createJiraIssue({
-      account: jiraAccount,
-      projectKey: mapping.projectKey,
-      summary,
-      description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
-      priorityName,
-      mondayItemUrl,
-      labels: mondayIdentityLabels
-    });
+      let createdIssue;
+      try {
+        createdIssue = await createJiraIssue({
+          account: jiraAccount,
+          projectKey: mapping.projectKey,
+          summary,
+          description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+          priorityName,
+          mondayItemUrl,
+          labels: mondayIdentityLabels
+        });
+      } catch (error) {
+        throw new Error(`Jira issue creation failed: ${errorMessage(error)}`);
+      }
 
     issueKey = createdIssue.key;
     created = true;
@@ -296,18 +310,23 @@ async function runSyncMondayItemToJira(input: {
       });
     } catch (error) {
       if (!isMissingJiraIssueError(error)) {
-        throw error;
+        throw new Error(`Jira issue update failed: ${errorMessage(error)}`);
       }
 
-      const recreatedIssue = await createJiraIssue({
-        account: jiraAccount,
-        projectKey: mapping.projectKey,
-        summary,
-        description: `Recreated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
-        priorityName,
-        mondayItemUrl,
-        labels: mondayIdentityLabels
-      });
+      let recreatedIssue;
+      try {
+        recreatedIssue = await createJiraIssue({
+          account: jiraAccount,
+          projectKey: mapping.projectKey,
+          summary,
+          description: `Recreated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+          priorityName,
+          mondayItemUrl,
+          labels: mondayIdentityLabels
+        });
+      } catch (createError) {
+        throw new Error(`Jira issue recreate failed: ${errorMessage(createError)}`);
+      }
 
       issueKey = recreatedIssue.key;
       created = true;
@@ -337,12 +356,17 @@ async function runSyncMondayItemToJira(input: {
     attachmentCount += 1;
   }
 
-  const statusSync = await applyJiraStatusFromMonday({
-    account: jiraAccount,
-    issueIdOrKey: issueKey,
-    statusLabel,
-    previousStatusLabel: existing?.lastStatusLabel
-  });
+  let statusSync;
+  try {
+    statusSync = await applyJiraStatusFromMonday({
+      account: jiraAccount,
+      issueIdOrKey: issueKey,
+      statusLabel,
+      previousStatusLabel: existing?.lastStatusLabel
+    });
+  } catch (error) {
+    throw new Error(`Jira status sync failed: ${errorMessage(error)}`);
+  }
 
   await setSyncedItem({
     boardId,
