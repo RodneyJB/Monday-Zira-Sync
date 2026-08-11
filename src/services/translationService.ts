@@ -32,6 +32,34 @@ function normalizeLanguage(language: string | undefined): string {
   return "none";
 }
 
+function detectLikelySourceLanguage(text: string): string {
+  const lower = text.toLowerCase();
+
+  if (/[\u00e4\u00f6\u00fc\u00df]/i.test(text)) {
+    return "de";
+  }
+
+  if (
+    /\b(und|nicht|der|die|das|mit|von|fuer|für|noch|keine|kein|kabine|arbeiten|garantie)\b/i.test(
+      lower
+    )
+  ) {
+    return "de";
+  }
+
+  return "en";
+}
+
+function isProviderErrorText(value: string): boolean {
+  const lower = value.toLowerCase();
+  return (
+    lower.includes("invalid source language") ||
+    lower.includes("example: langpair") ||
+    lower.includes("response status") ||
+    lower.includes("exception")
+  );
+}
+
 export async function translateText(input: {
   text: string;
   targetLanguage?: string;
@@ -78,7 +106,8 @@ export async function translateText(input: {
     try {
       const mmQuery = new URL("https://api.mymemory.translated.net/get");
       mmQuery.searchParams.set("q", input.text);
-      mmQuery.searchParams.set("langpair", `auto|${normalizedLanguage}`);
+      const sourceLanguage = detectLikelySourceLanguage(input.text);
+      mmQuery.searchParams.set("langpair", `${sourceLanguage}|${normalizedLanguage}`);
 
       const mmResponse = await fetch(mmQuery.toString(), { method: "GET" });
       if (!mmResponse.ok) {
@@ -91,8 +120,12 @@ export async function translateText(input: {
         };
       };
 
-      const translated = mmData.responseData?.translatedText?.trim();
-      return translated || input.text;
+      const translated = mmData.responseData?.translatedText?.trim() || "";
+      if (!translated || isProviderErrorText(translated)) {
+        return input.text;
+      }
+
+      return translated;
     } catch {
       return input.text;
     }
