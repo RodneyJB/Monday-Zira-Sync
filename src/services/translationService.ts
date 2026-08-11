@@ -41,17 +41,17 @@ export async function translateText(input: {
     return input.text;
   }
 
-  const query = new URL("https://translate.googleapis.com/translate_a/single");
-  query.searchParams.set("client", "gtx");
-  query.searchParams.set("sl", "auto");
-  query.searchParams.set("tl", normalizedLanguage);
-  query.searchParams.set("dt", "t");
-  query.searchParams.set("q", input.text);
+  const googleQuery = new URL("https://translate.googleapis.com/translate_a/single");
+  googleQuery.searchParams.set("client", "gtx");
+  googleQuery.searchParams.set("sl", "auto");
+  googleQuery.searchParams.set("tl", normalizedLanguage);
+  googleQuery.searchParams.set("dt", "t");
+  googleQuery.searchParams.set("q", input.text);
 
   try {
-    const response = await fetch(query.toString(), { method: "GET" });
+    const response = await fetch(googleQuery.toString(), { method: "GET" });
     if (!response.ok) {
-      return input.text;
+      throw new Error(`Google translation endpoint returned ${response.status}`);
     }
 
     const data = (await response.json()) as unknown;
@@ -70,8 +70,33 @@ export async function translateText(input: {
       .join("")
       .trim();
 
-    return translated || input.text;
+    if (translated) {
+      return translated;
+    }
   } catch {
-    return input.text;
+    // Try a second provider when Google endpoint fails or returns empty text.
+    try {
+      const mmQuery = new URL("https://api.mymemory.translated.net/get");
+      mmQuery.searchParams.set("q", input.text);
+      mmQuery.searchParams.set("langpair", `auto|${normalizedLanguage}`);
+
+      const mmResponse = await fetch(mmQuery.toString(), { method: "GET" });
+      if (!mmResponse.ok) {
+        return input.text;
+      }
+
+      const mmData = (await mmResponse.json()) as {
+        responseData?: {
+          translatedText?: string;
+        };
+      };
+
+      const translated = mmData.responseData?.translatedText?.trim();
+      return translated || input.text;
+    } catch {
+      return input.text;
+    }
   }
+
+  return input.text;
 }

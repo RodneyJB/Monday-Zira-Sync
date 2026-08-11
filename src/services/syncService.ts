@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import {
+  applyJiraStatusFromMonday,
   createJiraIssue,
   listJiraPriorities,
   updateJiraIssueSummary,
@@ -14,6 +15,10 @@ export type SyncResult = {
   issueKey: string;
   created: boolean;
   attachmentCount: number;
+  statusSync: {
+    action: "transitioned" | "labeled" | "skipped";
+    details: string;
+  };
 };
 
 function applyNameTranslations(name: string, translations: Record<string, string>): string {
@@ -165,7 +170,11 @@ export async function syncMondayItemToJira(input: {
     return {
       issueKey: existing.issueKey,
       created: false,
-      attachmentCount: 0
+      attachmentCount: 0,
+      statusSync: {
+        action: "skipped",
+        details: "keepSynced is disabled and item was already synced"
+      }
     };
   }
 
@@ -228,6 +237,12 @@ export async function syncMondayItemToJira(input: {
     attachmentCount += 1;
   }
 
+  const statusSync = await applyJiraStatusFromMonday({
+    account: jiraAccount,
+    issueIdOrKey: issueKey,
+    statusLabel
+  });
+
   await setSyncedItem({
     boardId,
     itemId,
@@ -238,6 +253,7 @@ export async function syncMondayItemToJira(input: {
   return {
     issueKey,
     created,
-    attachmentCount
+    attachmentCount,
+    statusSync
   };
 }

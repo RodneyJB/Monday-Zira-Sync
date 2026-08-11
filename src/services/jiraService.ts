@@ -32,6 +32,51 @@ type JiraPriorityResponse = Array<{
   name: string;
 }>;
 
+type JiraTransitionResponse = {
+  transitions: Array<{
+    id: string;
+    name: string;
+    to: {
+      id: string;
+      name: string;
+      statusCategory: {
+        key: string;
+        name: string;
+      };
+    };
+  }>;
+};
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLowerCase();
+}
+
+function slugifyStatus(status: string): string {
+  return status
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
+}
+
+function inferStatusCategory(statusLabel: string): string | null {
+  const status = normalizeStatus(statusLabel);
+
+  if (/(done|closed|resolved|finish|complete)/i.test(status)) {
+    return "done";
+  }
+
+  if (/(progress|working|doing|review|testing|qa|active)/i.test(status)) {
+    return "indeterminate";
+  }
+
+  if (/(todo|to do|open|ready|backlog|new)/i.test(status)) {
+    return "new";
+  }
+
+  return null;
+}
+
 function buildAuthHeader(account: JiraAccountConfig): string {
   const token = Buffer.from(`${account.email}:${account.apiToken}`).toString("base64");
   return `Basic ${token}`;
@@ -238,4 +283,92 @@ export async function uploadJiraAttachmentFromUrl(input: {
     const responseText = await uploadResponse.text();
     throw new Error(`Jira attachment upload failed (${uploadResponse.status}): ${responseText}`);
   }
+}
+
+async function transitionIssue(account: JiraAccountConfig, issueIdOrKey: string, transitionId: string): Promise<void> {
+  const url = new URL(`/rest/api/3/issue/${issueIdOrKey}/transitions`, account.baseUrl);
+
+  await axios.post(
+    url.toString(),
+    {
+      transition: {
+        id: transitionId
+      }
+    },
+    {
+      headers: {
+        ...jiraHeaders(account),
+        "Content-Type": "application/json"
+      },
+      timeout: 15000
+    }
+  );
+}
+
+async function addIssueLabel(account: JiraAccountConfig, issueIdOrKey: string, label: string): Promise<void> {
+  const url = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
+
+  await axios.put(
+    url.toString(),
+    {
+      update: {
+        labels: [{ add: label }]
+      }
+    },
+    {
+      headers: {
+        ...jiraHeaders(account),
+        "Content-Type": "application/json"
+      },
+      timeout: 15000
+    }
+  );
+}
+
+export async function applyJiraStatusFromMonday(input: {
+  account: JiraAccountConfig;
+  issueIdOrKey: string;
+  statusLabel: string;
+}): Promise<{ action: "transitioned" | "labeled" | "skipped"; details: string }> {
+  const statusLabel = input.statusLabel.trim();
+  if (!statusLabel) {
+    return { action: "skipped", details: "No status label available" };
+  }
+
+  const transitionsUrl = new URL(`/rest/api/3/issue/${input.issueIdOrKey}/transitions`, input.account.baseUrl);
+  const transitionsResponse = await axios.get<JiraTransitionResponse>(transitionsUrl.toString(), {
+    headers: jiraHeaders(input.account),
+    timeout: 15000
+  });
+
+  const transitions = transitionsResponse.data.transitions ?? [];
+  const normalizedTarget = normalizeStatus(statusLabel);
+
+  const exact = transitions.find((transition) => normalizeStatus(transition.to.name) === normalizedTarget);
+  if (exact) {
+    await transitionIssue(input.account, input.issueIdOrKey, exact.id);
+    return { action: "transitioned", details: `Transitioned to ${exact.to.name}` };
+  }
+
+  const inferredCategory = inferStatusCategory(statusLabel);
+  if (inferredCategory) {
+    const byCategory = transitions.find(
+      (transition) => normalizeStatus(transition.to.statusCategory.key) === inferredCategory
+    );
+
+    if (byCategory) {
+      await transitionIssue(input.account, input.issueIdOrKey, byCategory.id);
+      return {
+        action: "transitioned",
+        details: `Transitioned by category ${inferredCategory} to ${byCategory.to.name}`
+      };
+    }
+  }
+
+  const fallbackLabel = `monday-status-${slugifyStatus(statusLabel)}`;
+  await addIssueLabel(input.account, input.issueIdOrKey, fallbackLabel);
+  return {
+    action: "labeled",
+    details: `No Jira status transition matched; added label ${fallbackLabel}`
+  };
 }

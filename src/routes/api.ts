@@ -436,7 +436,7 @@ apiRouter.post("/monday/webhook", async (req, res) => {
         decision: "synced",
         details: `Issue ${result.issueKey} (created=${String(result.created)}, attachments=${String(
           result.attachmentCount
-        )})`
+        )}, status=${result.statusSync.action}: ${result.statusSync.details})`
       });
     } catch (error) {
       const details = error instanceof Error ? error.message : "Unknown error";
