@@ -128,6 +128,28 @@ Manual sync payload example:
 }
 ```
 
+## Cleanup duplicate Jira issues
+
+When webhook bursts or retries created duplicate Jira issues for the same Monday item, use this script.
+
+Dry run (no deletions):
+
+```bash
+npm run jira:dedupe -- --account main --project BIXN
+```
+
+Delete duplicates after reviewing dry-run output:
+
+```bash
+npm run jira:dedupe -- --account main --project BIXN --apply --delete
+```
+
+Useful options:
+
+- `--keep oldest` (default) keeps the earliest created Jira issue per Monday link.
+- `--keep newest` keeps the latest issue instead.
+- `--limit 20` only deletes the first 20 planned duplicate issues.
+
 ## Monday API hookup in developer center
 
 1. In Monday Developers, open your app.
