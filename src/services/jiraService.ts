@@ -19,6 +19,11 @@ export type JiraCreatedIssue = {
   self: string;
 };
 
+export type JiraIssueMatch = {
+  id: string;
+  key: string;
+};
+
 type JiraDocNode = {
   type: string;
   text?: string;
@@ -32,10 +37,14 @@ type JiraDocNode = {
 };
 
 type JiraSearchResponse = {
-  values: Array<{
+  values?: Array<{
     id: string;
     key: string;
     name: string;
+  }>;
+  issues?: Array<{
+    id: string;
+    key: string;
   }>;
 };
 
@@ -176,11 +185,55 @@ export async function listJiraProjects(account: JiraAccountConfig): Promise<Jira
     timeout: 15000
   });
 
-  return response.data.values.map((project) => ({
+  return (response.data.values ?? []).map((project) => ({
     id: project.id,
     key: project.key,
     name: project.name
   }));
+}
+
+export async function findJiraIssueByLabels(input: {
+  account: JiraAccountConfig;
+  projectKey: string;
+  labels: string[];
+}): Promise<JiraIssueMatch | null> {
+  const { account, projectKey } = input;
+  const labels = input.labels.filter((label) => label.trim().length > 0);
+  if (labels.length === 0) {
+    return null;
+  }
+
+  const escapedProject = projectKey.replace(/"/g, "\\\"");
+  const labelClauses = labels.map((label) => `labels = \"${label.replace(/\"/g, "\\\\\"")}\"`);
+  const jql = `project = \"${escapedProject}\" AND ${labelClauses.join(" AND ")} ORDER BY created DESC`;
+
+  const url = new URL("/rest/api/3/search", account.baseUrl);
+
+  const response = await axios.post<JiraSearchResponse>(
+    url.toString(),
+    {
+      jql,
+      maxResults: 1,
+      fields: ["id", "key"]
+    },
+    {
+      headers: {
+        ...jiraHeaders(account),
+        "Content-Type": "application/json"
+      },
+      timeout: 15000
+    }
+  );
+
+  const match = response.data.issues?.[0];
+  if (!match) {
+    return null;
+  }
+
+  return {
+    id: match.id,
+    key: match.key
+  };
 }
 
 export async function createJiraIssue(input: {
@@ -190,8 +243,9 @@ export async function createJiraIssue(input: {
   description?: string;
   priorityName?: string;
   mondayItemUrl?: string;
+  labels?: string[];
 }): Promise<JiraCreatedIssue> {
-  const { account, projectKey, summary, description, priorityName, mondayItemUrl } = input;
+  const { account, projectKey, summary, description, priorityName, mondayItemUrl, labels } = input;
 
   const url = new URL("/rest/api/3/issue", account.baseUrl);
   const buildPayload = (includePriority: boolean) => ({
@@ -210,6 +264,7 @@ export async function createJiraIssue(input: {
             }
           }
         : {}),
+      ...(labels && labels.length > 0 ? { labels } : {}),
       description: buildJiraDescriptionDoc(
         description ?? "Created automatically from Monday board item.",
         mondayItemUrl

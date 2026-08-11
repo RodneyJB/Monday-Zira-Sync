@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import {
   applyJiraStatusFromMonday,
   createJiraIssue,
+  findJiraIssueByLabels,
   listJiraPriorities,
   updateJiraIssueSummary,
   uploadJiraAttachmentFromUrl
@@ -44,6 +45,22 @@ function applyNameTranslations(name: string, translations: Record<string, string
   }
 
   return output;
+}
+
+function slugLabelSegment(input: string, maxLength = 40): string {
+  const slug = input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug.slice(0, maxLength) || "na";
+}
+
+function buildMondayIdentityLabels(boardId: string, itemId: string): string[] {
+  return [
+    `monday-board-${slugLabelSegment(boardId)}`,
+    `monday-item-${slugLabelSegment(itemId)}`
+  ];
 }
 
 async function resolveSummaryFromMapping(
@@ -206,6 +223,19 @@ async function runSyncMondayItemToJira(input: {
 
   let issueKey = existing?.issueKey;
   let created = false;
+  const mondayIdentityLabels = buildMondayIdentityLabels(boardId, itemId);
+
+  if (!issueKey) {
+    const matchedIssue = await findJiraIssueByLabels({
+      account: jiraAccount,
+      projectKey: mapping.projectKey,
+      labels: mondayIdentityLabels
+    });
+
+    if (matchedIssue) {
+      issueKey = matchedIssue.key;
+    }
+  }
 
   if (!issueKey) {
     const createdIssue = await createJiraIssue({
@@ -214,7 +244,8 @@ async function runSyncMondayItemToJira(input: {
       summary,
       description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
       priorityName,
-      mondayItemUrl
+      mondayItemUrl,
+      labels: mondayIdentityLabels
     });
 
     issueKey = createdIssue.key;
