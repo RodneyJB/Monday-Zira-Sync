@@ -21,6 +21,10 @@ export type SyncResult = {
   };
 };
 
+function buildMondayItemUrl(boardId: string, itemId: string): string {
+  return `https://monday.com/boards/${boardId}/pulses/${itemId}`;
+}
+
 function applyNameTranslations(name: string, translations: Record<string, string>): string {
   let output = name;
   for (const [from, to] of Object.entries(translations)) {
@@ -181,6 +185,7 @@ export async function syncMondayItemToJira(input: {
   const mondayItem = await getMondayItemForSync(itemId);
   const summary = await resolveSummaryFromMapping(mondayItem, mapping);
   const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
+  const mondayItemUrl = buildMondayItemUrl(mondayItem.boardId, mondayItem.id);
   const liveStatusLabel = mapping.statusColumnId
     ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""
     : "";
@@ -199,7 +204,7 @@ export async function syncMondayItemToJira(input: {
       account: jiraAccount,
       projectKey: mapping.projectKey,
       summary,
-      description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+      description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.\n\n${mondayItemUrl}`,
       priorityName
     });
 
@@ -210,7 +215,7 @@ export async function syncMondayItemToJira(input: {
       account: jiraAccount,
       issueIdOrKey: issueKey,
       summary,
-      description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+      description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.\n\n${mondayItemUrl}`,
       priorityName
     });
   }
@@ -240,14 +245,16 @@ export async function syncMondayItemToJira(input: {
   const statusSync = await applyJiraStatusFromMonday({
     account: jiraAccount,
     issueIdOrKey: issueKey,
-    statusLabel
+    statusLabel,
+    previousStatusLabel: existing?.lastStatusLabel
   });
 
   await setSyncedItem({
     boardId,
     itemId,
     issueKey,
-    uploadedAssetIds
+    uploadedAssetIds,
+    lastStatusLabel: statusSync.appliedLabel
   });
 
   return {
