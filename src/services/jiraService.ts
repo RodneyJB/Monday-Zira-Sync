@@ -19,6 +19,18 @@ export type JiraCreatedIssue = {
   self: string;
 };
 
+type JiraDocNode = {
+  type: string;
+  text?: string;
+  marks?: Array<{
+    type: string;
+    attrs: {
+      href: string;
+    };
+  }>;
+  content?: JiraDocNode[];
+};
+
 type JiraSearchResponse = {
   values: Array<{
     id: string;
@@ -111,6 +123,50 @@ function jiraHeaders(account: JiraAccountConfig) {
   };
 }
 
+function buildJiraDescriptionDoc(description: string, mondayItemUrl?: string): {
+  type: string;
+  version: number;
+  content: JiraDocNode[];
+} {
+  const content: JiraDocNode[] = [
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: description
+        }
+      ]
+    }
+  ];
+
+  if (mondayItemUrl) {
+    content.push({
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "Open in Monday",
+          marks: [
+            {
+              type: "link",
+              attrs: {
+                href: mondayItemUrl
+              }
+            }
+          ]
+        }
+      ]
+    });
+  }
+
+  return {
+    type: "doc",
+    version: 1,
+    content
+  };
+}
+
 export async function listJiraProjects(account: JiraAccountConfig): Promise<JiraProject[]> {
   const url = new URL("/rest/api/3/project/search", account.baseUrl);
   url.searchParams.set("maxResults", "100");
@@ -133,8 +189,9 @@ export async function createJiraIssue(input: {
   summary: string;
   description?: string;
   priorityName?: string;
+  mondayItemUrl?: string;
 }): Promise<JiraCreatedIssue> {
-  const { account, projectKey, summary, description, priorityName } = input;
+  const { account, projectKey, summary, description, priorityName, mondayItemUrl } = input;
 
   const url = new URL("/rest/api/3/issue", account.baseUrl);
   const buildPayload = (includePriority: boolean) => ({
@@ -153,21 +210,10 @@ export async function createJiraIssue(input: {
             }
           }
         : {}),
-      description: {
-        type: "doc",
-        version: 1,
-        content: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: description ?? "Created automatically from Monday board item."
-              }
-            ]
-          }
-        ]
-      }
+      description: buildJiraDescriptionDoc(
+        description ?? "Created automatically from Monday board item.",
+        mondayItemUrl
+      )
     }
   });
 
@@ -203,8 +249,9 @@ export async function updateJiraIssueSummary(input: {
   summary: string;
   description?: string;
   priorityName?: string;
+  mondayItemUrl?: string;
 }): Promise<void> {
-  const { account, issueIdOrKey, summary, description, priorityName } = input;
+  const { account, issueIdOrKey, summary, description, priorityName, mondayItemUrl } = input;
   const url = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
 
   const buildPayload = (includePriority: boolean) => ({
@@ -217,21 +264,10 @@ export async function updateJiraIssueSummary(input: {
             }
           }
         : {}),
-      description: {
-        type: "doc",
-        version: 1,
-        content: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: description ?? "Updated automatically from Monday board item."
-              }
-            ]
-          }
-        ]
-      }
+      description: buildJiraDescriptionDoc(
+        description ?? "Updated automatically from Monday board item.",
+        mondayItemUrl
+      )
     }
   });
 
@@ -393,11 +429,24 @@ export async function applyJiraStatusFromMonday(input: {
   const transitions = transitionsResponse.data.transitions ?? [];
   const normalizedTarget = normalizeStatus(statusLabel);
   const normalizedTargetComparable = normalizeComparable(statusLabel);
+  const fallbackLabel = formatFallbackStatusLabel(statusLabel);
+
+  // Keep a single visible label that mirrors the latest Monday status.
+  await replaceMondayStatusLabel(
+    input.account,
+    input.issueIdOrKey,
+    fallbackLabel,
+    input.previousStatusLabel
+  );
 
   const exact = transitions.find((transition) => normalizeStatus(transition.to.name) === normalizedTarget);
   if (exact) {
     await transitionIssue(input.account, input.issueIdOrKey, exact.id);
-    return { action: "transitioned", details: `Transitioned to ${exact.to.name}` };
+    return {
+      action: "transitioned",
+      details: `Transitioned to ${exact.to.name}; label set ${fallbackLabel}`,
+      appliedLabel: fallbackLabel
+    };
   }
 
   const fuzzy = transitions.find((transition) => {
@@ -413,7 +462,8 @@ export async function applyJiraStatusFromMonday(input: {
     await transitionIssue(input.account, input.issueIdOrKey, fuzzy.id);
     return {
       action: "transitioned",
-      details: `Transitioned by fuzzy match to ${fuzzy.to.name}`
+      details: `Transitioned by fuzzy match to ${fuzzy.to.name}; label set ${fallbackLabel}`,
+      appliedLabel: fallbackLabel
     };
   }
 
@@ -427,18 +477,12 @@ export async function applyJiraStatusFromMonday(input: {
       await transitionIssue(input.account, input.issueIdOrKey, byCategory.id);
       return {
         action: "transitioned",
-        details: `Transitioned by category ${inferredCategory} to ${byCategory.to.name}`
+        details: `Transitioned by category ${inferredCategory} to ${byCategory.to.name}; label set ${fallbackLabel}`,
+        appliedLabel: fallbackLabel
       };
     }
   }
 
-  const fallbackLabel = formatFallbackStatusLabel(statusLabel);
-  await replaceMondayStatusLabel(
-    input.account,
-    input.issueIdOrKey,
-    fallbackLabel,
-    input.previousStatusLabel
-  );
   return {
     action: "labeled",
     details: `No Jira status transition matched; set label ${fallbackLabel}`,

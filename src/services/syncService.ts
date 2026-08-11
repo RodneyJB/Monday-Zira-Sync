@@ -204,8 +204,9 @@ export async function syncMondayItemToJira(input: {
       account: jiraAccount,
       projectKey: mapping.projectKey,
       summary,
-      description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.\n\n${mondayItemUrl}`,
-      priorityName
+      description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+      priorityName,
+      mondayItemUrl
     });
 
     issueKey = createdIssue.key;
@@ -215,8 +216,9 @@ export async function syncMondayItemToJira(input: {
       account: jiraAccount,
       issueIdOrKey: issueKey,
       summary,
-      description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.\n\n${mondayItemUrl}`,
-      priorityName
+      description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+      priorityName,
+      mondayItemUrl
     });
   }
 
