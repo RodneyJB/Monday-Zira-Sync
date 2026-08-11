@@ -391,24 +391,18 @@ apiRouter.post("/sync/item", async (req, res) => {
   }
 });
 
-apiRouter.get("/monday/webhook", async (req, res) => {
+apiRouter.all("/monday/webhook", async (req, res) => {
   if (respondWithWebhookChallenge(req.body, req.query, res)) {
     return;
   }
 
-  res.status(200).json({ ok: true });
-});
+  if (req.method.toUpperCase() !== "POST") {
+    if (req.method.toUpperCase() === "HEAD") {
+      res.status(200).end();
+      return;
+    }
 
-apiRouter.head("/monday/webhook", async (req, res) => {
-  if (respondWithWebhookChallenge(req.body, req.query, res)) {
-    return;
-  }
-
-  res.status(200).end();
-});
-
-apiRouter.post("/monday/webhook", async (req, res) => {
-  if (respondWithWebhookChallenge(req.body, req.query, res)) {
+    res.status(200).json({ ok: true });
     return;
   }
 
