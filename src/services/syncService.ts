@@ -22,6 +22,16 @@ export type SyncResult = {
   };
 };
 
+function isMissingJiraIssueError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const response = (error as { response?: { status?: number } }).response;
+  const status = response?.status;
+  return status === 404 || status === 410;
+}
+
 const inFlightSyncs = new Map<string, Promise<SyncResult>>();
 
 function makeSyncKey(boardId: string, itemId: string): string {
@@ -223,6 +233,7 @@ async function runSyncMondayItemToJira(input: {
 
   let issueKey = existing?.issueKey;
   let created = false;
+  let usingExistingIssueKey = Boolean(issueKey);
   const mondayIdentityLabels = buildMondayIdentityLabels(boardId, itemId);
 
   if (!issueKey) {
@@ -250,19 +261,40 @@ async function runSyncMondayItemToJira(input: {
 
     issueKey = createdIssue.key;
     created = true;
+    usingExistingIssueKey = false;
   } else {
-    await updateJiraIssueSummary({
-      account: jiraAccount,
-      issueIdOrKey: issueKey,
-      summary,
-      description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
-      priorityName,
-      mondayItemUrl
-    });
+    try {
+      await updateJiraIssueSummary({
+        account: jiraAccount,
+        issueIdOrKey: issueKey,
+        summary,
+        description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+        priorityName,
+        mondayItemUrl
+      });
+    } catch (error) {
+      if (!isMissingJiraIssueError(error)) {
+        throw error;
+      }
+
+      const recreatedIssue = await createJiraIssue({
+        account: jiraAccount,
+        projectKey: mapping.projectKey,
+        summary,
+        description: `Recreated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
+        priorityName,
+        mondayItemUrl,
+        labels: mondayIdentityLabels
+      });
+
+      issueKey = recreatedIssue.key;
+      created = true;
+      usingExistingIssueKey = false;
+    }
   }
 
   let attachmentCount = 0;
-  const alreadyUploadedAssetIds = new Set(existing?.uploadedAssetIds ?? []);
+  const alreadyUploadedAssetIds = new Set(usingExistingIssueKey ? existing?.uploadedAssetIds ?? [] : []);
   const uploadedAssetIds = [...alreadyUploadedAssetIds];
 
   for (const asset of assetsToSync) {
