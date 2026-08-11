@@ -21,6 +21,12 @@ export type SyncResult = {
   };
 };
 
+const inFlightSyncs = new Map<string, Promise<SyncResult>>();
+
+function makeSyncKey(boardId: string, itemId: string): string {
+  return `${boardId}:${itemId}`;
+}
+
 function buildMondayItemUrl(boardId: string, itemId: string): string {
   const baseUrl = config.MONDAY_ACCOUNT_BASE_URL.replace(/\/$/, "");
   const mapping = `boards/${boardId}/pulses/${itemId}`;
@@ -152,7 +158,7 @@ function resolvePriorityFromStatusLabel(input: {
   return pickFirstAvailable(["medium", "high", "low", "highest", "lowest"]);
 }
 
-export async function syncMondayItemToJira(input: {
+async function runSyncMondayItemToJira(input: {
   boardId: string;
   itemId: string;
   keepSynced?: boolean;
@@ -267,4 +273,29 @@ export async function syncMondayItemToJira(input: {
     attachmentCount,
     statusSync
   };
+}
+
+export async function syncMondayItemToJira(input: {
+  boardId: string;
+  itemId: string;
+  keepSynced?: boolean;
+  statusLabel?: string;
+}): Promise<SyncResult> {
+  const key = makeSyncKey(input.boardId, input.itemId);
+  const inFlight = inFlightSyncs.get(key);
+
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const running = runSyncMondayItemToJira(input);
+  inFlightSyncs.set(key, running);
+
+  try {
+    return await running;
+  } finally {
+    if (inFlightSyncs.get(key) === running) {
+      inFlightSyncs.delete(key);
+    }
+  }
 }
