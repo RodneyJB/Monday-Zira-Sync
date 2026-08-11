@@ -47,6 +47,14 @@ type JiraTransitionResponse = {
   }>;
 };
 
+type JiraIssueLabelsResponse = {
+  fields: {
+    labels?: string[];
+  };
+};
+
+const mondayStatusLabelPrefix = "monday-status-";
+
 function normalizeStatus(status: string): string {
   return status.trim().toLowerCase();
 }
@@ -305,14 +313,29 @@ async function transitionIssue(account: JiraAccountConfig, issueIdOrKey: string,
   );
 }
 
-async function addIssueLabel(account: JiraAccountConfig, issueIdOrKey: string, label: string): Promise<void> {
-  const url = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
+async function replaceMondayStatusLabel(
+  account: JiraAccountConfig,
+  issueIdOrKey: string,
+  nextLabel: string
+): Promise<void> {
+  const issueUrl = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
+  issueUrl.searchParams.set("fields", "labels");
 
+  const issueResponse = await axios.get<JiraIssueLabelsResponse>(issueUrl.toString(), {
+    headers: jiraHeaders(account),
+    timeout: 15000
+  });
+
+  const existingLabels = issueResponse.data.fields.labels ?? [];
+  const preservedLabels = existingLabels.filter((label) => !label.startsWith(mondayStatusLabelPrefix));
+  const finalLabels = [...new Set([...preservedLabels, nextLabel])];
+
+  const updateUrl = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
   await axios.put(
-    url.toString(),
+    updateUrl.toString(),
     {
-      update: {
-        labels: [{ add: label }]
+      fields: {
+        labels: finalLabels
       }
     },
     {
@@ -365,10 +388,10 @@ export async function applyJiraStatusFromMonday(input: {
     }
   }
 
-  const fallbackLabel = `monday-status-${slugifyStatus(statusLabel)}`;
-  await addIssueLabel(input.account, input.issueIdOrKey, fallbackLabel);
+  const fallbackLabel = `${mondayStatusLabelPrefix}${slugifyStatus(statusLabel)}`;
+  await replaceMondayStatusLabel(input.account, input.issueIdOrKey, fallbackLabel);
   return {
     action: "labeled",
-    details: `No Jira status transition matched; added label ${fallbackLabel}`
+    details: `No Jira status transition matched; set label ${fallbackLabel}`
   };
 }
