@@ -10,7 +10,7 @@ import {
   getMondayBoardSummary,
   getMondayMe
 } from "../services/mondayService.js";
-import { getSyncedItem } from "../services/syncStateStore.js";
+import { clearSyncedItemsForBoard, getSyncedItem } from "../services/syncStateStore.js";
 import { syncMondayItemToJira } from "../services/syncService.js";
 
 const optionalTextField = z.preprocess(
@@ -94,6 +94,10 @@ const saveMappingSchema = z.object({
 const syncItemSchema = z.object({
   boardId: z.string().min(1),
   itemId: z.string().min(1)
+});
+
+const resetBoardSchema = z.object({
+  boardId: z.string().min(1)
 });
 
 type WebhookDebugEvent = {
@@ -371,8 +375,28 @@ apiRouter.post("/mapping", async (req, res) => {
     return;
   }
 
+  const existing = await getBoardMapping(parsed.data.boardId);
+  let resetSyncedItems = false;
+  let resetReason = "";
+  let resetCount = 0;
+
+  if (existing) {
+    const targetChanged =
+      existing.accountId !== parsed.data.accountId || existing.projectKey !== parsed.data.projectKey;
+    const viewChanged =
+      Boolean(existing.boardViewId) &&
+      Boolean(parsed.data.boardViewId) &&
+      existing.boardViewId !== parsed.data.boardViewId;
+
+    if (targetChanged || viewChanged) {
+      resetSyncedItems = true;
+      resetReason = targetChanged ? "Jira target changed (account/project)" : "Board view changed";
+      resetCount = await clearSyncedItemsForBoard(parsed.data.boardId);
+    }
+  }
+
   const mapping = await saveBoardMapping(parsed.data);
-  res.status(201).json({ mapping });
+  res.status(201).json({ mapping, resetSyncedItems, resetReason, resetCount });
 });
 
 apiRouter.post("/sync/item", async (req, res) => {
@@ -389,6 +413,17 @@ apiRouter.post("/sync/item", async (req, res) => {
     const details = error instanceof Error ? error.message : "Unknown error";
     res.status(502).json({ error: "Could not sync Monday item to Jira", details });
   }
+});
+
+apiRouter.post("/sync/reset-board", async (req, res) => {
+  const parsed = resetBoardSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+    return;
+  }
+
+  const count = await clearSyncedItemsForBoard(parsed.data.boardId);
+  res.status(200).json({ reset: true, boardId: parsed.data.boardId, count });
 });
 
 apiRouter.all("/monday/webhook", async (req, res) => {

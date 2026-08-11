@@ -157,6 +157,27 @@ button {
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
+.action-row {
+  display: grid;
+  gap: 10px;
+}
+
+.action-row button {
+  margin-top: 0;
+}
+
+.secondary {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.danger {
+  border-color: #f0b4ad;
+  color: #7f1d1d;
+  background: #fff5f4;
+}
+
 button:hover:enabled {
   transform: translateY(-1px);
 }

@@ -128,7 +128,12 @@
           </select>
         </fieldset>
 
-        <button id="saveButton" type="button" disabled>Save board mapping</button>
+        <div class="action-row">
+          <button id="saveButton" type="button" disabled>Save board mapping</button>
+          <button id="resetBoardButton" type="button" class="secondary danger" disabled>
+            Reset synced items for this board
+          </button>
+        </div>
 
         <p id="status" class="status" role="status" aria-live="polite"></p>
       </section>

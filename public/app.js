@@ -11,6 +11,7 @@ const nameTranslationsInput = document.getElementById("nameTranslationsInput");
 const attachmentSourceSelect = document.getElementById("attachmentSourceSelect");
 const attachmentColumnIdSelect = document.getElementById("attachmentColumnIdSelect");
 const saveButton = document.getElementById("saveButton");
+const resetBoardButton = document.getElementById("resetBoardButton");
 const boardIdLabel = document.getElementById("boardIdLabel");
 const statusEl = document.getElementById("status");
 
@@ -27,6 +28,7 @@ function setStatus(message, type = "") {
 
 function setSaveEnabled() {
   saveButton.disabled = !(boardId && accountSelect.value && projectSelect.value);
+  resetBoardButton.disabled = !boardId;
 }
 
 function refreshRuleFieldState() {
@@ -323,7 +325,7 @@ saveButton.addEventListener("click", async () => {
   saveButton.disabled = true;
 
   try {
-    await fetchJson("/api/mapping", {
+    const data = await fetchJson("/api/mapping", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -345,9 +347,53 @@ saveButton.addEventListener("click", async () => {
       })
     });
 
-    setStatus("Saved. Sync project, rule, and field mapping are now active.", "ok");
+    if (data?.resetSyncedItems) {
+      setStatus(
+        `Saved. Existing item links reset for this board (${data.resetCount || 0} items) because ${
+          data.resetReason || "mapping changed"
+        }. New syncs will create fresh Jira issues.`,
+        "ok"
+      );
+    } else {
+      setStatus("Saved. Sync project, rule, and field mapping are now active.", "ok");
+    }
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Could not save mapping", "error");
+  } finally {
+    setSaveEnabled();
+  }
+});
+
+resetBoardButton.addEventListener("click", async () => {
+  if (!boardId) {
+    setStatus("Board ID is not available yet.", "error");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "Reset synced items for this board? Existing Jira issues stay in Jira, but Monday item links will be cleared so future syncs create fresh issues."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  saveButton.disabled = true;
+  resetBoardButton.disabled = true;
+
+  try {
+    const data = await fetchJson("/api/sync/reset-board", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boardId })
+    });
+
+    setStatus(
+      `Reset complete for board ${boardId}. Cleared ${data.count || 0} synced item links. New syncs will create fresh Jira issues.",
+      "ok"
+    );
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : "Could not reset board sync links", "error");
   } finally {
     setSaveEnabled();
   }
