@@ -389,7 +389,7 @@ resetBoardButton.addEventListener("click", async () => {
     });
 
     setStatus(
-      `Reset complete for board ${boardId}. Cleared ${data.count || 0} synced item links. New syncs will create fresh Jira issues.",
+      `Reset complete for board ${boardId}. Cleared ${data.count || 0} synced item links. New syncs will create fresh Jira issues.`,
       "ok"
     );
   } catch (error) {
