@@ -32,6 +32,16 @@ function isMissingJiraIssueError(error: unknown): boolean {
   return status === 404 || status === 410;
 }
 
+function isJiraLookupUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const response = (error as { response?: { status?: number } }).response;
+  const status = response?.status;
+  return status === 404 || status === 405 || status === 410;
+}
+
 const inFlightSyncs = new Map<string, Promise<SyncResult>>();
 
 function makeSyncKey(boardId: string, itemId: string): string {
@@ -237,14 +247,26 @@ async function runSyncMondayItemToJira(input: {
   const mondayIdentityLabels = buildMondayIdentityLabels(boardId, itemId);
 
   if (!issueKey) {
-    const matchedIssue = await findJiraIssueByLabels({
-      account: jiraAccount,
-      projectKey: mapping.projectKey,
-      labels: mondayIdentityLabels
-    });
+    try {
+      const matchedIssue = await findJiraIssueByLabels({
+        account: jiraAccount,
+        projectKey: mapping.projectKey,
+        labels: mondayIdentityLabels
+      });
 
-    if (matchedIssue) {
-      issueKey = matchedIssue.key;
+      if (matchedIssue) {
+        issueKey = matchedIssue.key;
+      }
+    } catch (error) {
+      if (!isJiraLookupUnavailableError(error)) {
+        throw error;
+      }
+
+      console.warn("Jira lookup by labels unavailable; continuing without lookup", {
+        boardId,
+        itemId,
+        projectKey: mapping.projectKey
+      });
     }
   }
 
