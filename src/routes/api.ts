@@ -192,6 +192,17 @@ function extractWebhookChallenge(body: unknown, query: unknown): string {
   return "";
 }
 
+function respondWithWebhookChallenge(reqBody: unknown, reqQuery: unknown, res: { status: (code: number) => { json: (payload: unknown) => void } }): boolean {
+  const challenge = extractWebhookChallenge(reqBody, reqQuery);
+  if (!challenge) {
+    return false;
+  }
+
+  // Monday webhook URL validation expects the challenge echoed as JSON.
+  res.status(200).json({ challenge });
+  return true;
+}
+
 function extractStatusLabelFromEvent(event: Record<string, unknown>): string {
   const value = parseEventValue(event.value);
   const label = value.label;
@@ -380,11 +391,24 @@ apiRouter.post("/sync/item", async (req, res) => {
   }
 });
 
+apiRouter.get("/monday/webhook", async (req, res) => {
+  if (respondWithWebhookChallenge(req.body, req.query, res)) {
+    return;
+  }
+
+  res.status(200).json({ ok: true });
+});
+
+apiRouter.head("/monday/webhook", async (req, res) => {
+  if (respondWithWebhookChallenge(req.body, req.query, res)) {
+    return;
+  }
+
+  res.status(200).end();
+});
+
 apiRouter.post("/monday/webhook", async (req, res) => {
-  const challenge = extractWebhookChallenge(req.body, req.query);
-  if (challenge) {
-    // Monday webhook verifier expects the same challenge string echoed back.
-    res.status(200).send(challenge);
+  if (respondWithWebhookChallenge(req.body, req.query, res)) {
     return;
   }
 
