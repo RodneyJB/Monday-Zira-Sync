@@ -181,10 +181,10 @@ export async function syncMondayItemToJira(input: {
   const mondayItem = await getMondayItemForSync(itemId);
   const summary = await resolveSummaryFromMapping(mondayItem, mapping);
   const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
-  const fallbackStatusLabel = mapping.statusColumnId
+  const liveStatusLabel = mapping.statusColumnId
     ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""
     : "";
-  const statusLabel = (input.statusLabel || fallbackStatusLabel).trim();
+  const statusLabel = (liveStatusLabel || input.statusLabel || "").trim();
   const jiraPriorities = await listJiraPriorities(jiraAccount);
   const priorityName = resolvePriorityFromStatusLabel({
     statusLabel,

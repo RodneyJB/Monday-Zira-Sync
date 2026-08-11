@@ -54,6 +54,7 @@ function isProviderErrorText(value: string): boolean {
   const lower = value.toLowerCase();
   return (
     lower.includes("invalid source language") ||
+    lower.includes("please select two distinct languages") ||
     lower.includes("example: langpair") ||
     lower.includes("response status") ||
     lower.includes("exception")
@@ -107,6 +108,10 @@ export async function translateText(input: {
       const mmQuery = new URL("https://api.mymemory.translated.net/get");
       mmQuery.searchParams.set("q", input.text);
       const sourceLanguage = detectLikelySourceLanguage(input.text);
+      if (sourceLanguage === normalizedLanguage) {
+        return input.text;
+      }
+
       mmQuery.searchParams.set("langpair", `${sourceLanguage}|${normalizedLanguage}`);
 
       const mmResponse = await fetch(mmQuery.toString(), { method: "GET" });

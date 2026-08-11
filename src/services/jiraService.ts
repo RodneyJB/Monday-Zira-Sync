@@ -59,6 +59,14 @@ function normalizeStatus(status: string): string {
   return status.trim().toLowerCase();
 }
 
+function normalizeComparable(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+}
+
 function slugifyStatus(status: string): string {
   return status
     .toLowerCase()
@@ -82,7 +90,8 @@ function inferStatusCategory(statusLabel: string): string | null {
     return "new";
   }
 
-  return null;
+  // For domain-specific labels (OEM, parts/components, etc.), default to in-progress category.
+  return "indeterminate";
 }
 
 function buildAuthHeader(account: JiraAccountConfig): string {
@@ -366,11 +375,29 @@ export async function applyJiraStatusFromMonday(input: {
 
   const transitions = transitionsResponse.data.transitions ?? [];
   const normalizedTarget = normalizeStatus(statusLabel);
+  const normalizedTargetComparable = normalizeComparable(statusLabel);
 
   const exact = transitions.find((transition) => normalizeStatus(transition.to.name) === normalizedTarget);
   if (exact) {
     await transitionIssue(input.account, input.issueIdOrKey, exact.id);
     return { action: "transitioned", details: `Transitioned to ${exact.to.name}` };
+  }
+
+  const fuzzy = transitions.find((transition) => {
+    const transitionComparable = normalizeComparable(transition.to.name);
+    return (
+      transitionComparable === normalizedTargetComparable ||
+      transitionComparable.includes(normalizedTargetComparable) ||
+      normalizedTargetComparable.includes(transitionComparable)
+    );
+  });
+
+  if (fuzzy) {
+    await transitionIssue(input.account, input.issueIdOrKey, fuzzy.id);
+    return {
+      action: "transitioned",
+      details: `Transitioned by fuzzy match to ${fuzzy.to.name}`
+    };
   }
 
   const inferredCategory = inferStatusCategory(statusLabel);
