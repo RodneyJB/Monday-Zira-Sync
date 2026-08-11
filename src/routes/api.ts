@@ -148,6 +148,50 @@ function parseEventValue(rawValue: unknown): Record<string, unknown> {
   return {};
 }
 
+function parseMaybeJsonObject(input: unknown): Record<string, unknown> {
+  if (input && typeof input === "object") {
+    return input as Record<string, unknown>;
+  }
+
+  if (typeof input === "string") {
+    try {
+      const parsed = JSON.parse(input) as unknown;
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
+function extractWebhookChallenge(body: unknown, query: unknown): string {
+  const bodyObj = parseMaybeJsonObject(body);
+  const dataObj = parseMaybeJsonObject(bodyObj.data);
+  const payloadObj = parseMaybeJsonObject(bodyObj.payload);
+  const eventObj = parseMaybeJsonObject(bodyObj.event);
+  const queryObj = parseMaybeJsonObject(query);
+
+  const challengeCandidates = [
+    bodyObj.challenge,
+    dataObj.challenge,
+    payloadObj.challenge,
+    eventObj.challenge,
+    queryObj.challenge,
+    typeof body === "string" ? body.trim() : ""
+  ];
+
+  for (const candidate of challengeCandidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return "";
+}
+
 function extractStatusLabelFromEvent(event: Record<string, unknown>): string {
   const value = parseEventValue(event.value);
   const label = value.label;
@@ -337,9 +381,10 @@ apiRouter.post("/sync/item", async (req, res) => {
 });
 
 apiRouter.post("/monday/webhook", async (req, res) => {
-  const challenge = req.body?.challenge;
-  if (typeof challenge === "string") {
-    res.status(200).json({ challenge });
+  const challenge = extractWebhookChallenge(req.body, req.query);
+  if (challenge) {
+    // Monday webhook verifier expects the same challenge string echoed back.
+    res.status(200).send(challenge);
     return;
   }
 
