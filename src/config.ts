@@ -16,8 +16,9 @@ const envSchema = z.object({
   MONDAY_API_VERSION: z.string().default("2025-04"),
   MONDAY_ACCOUNT_BASE_URL: z.url().default("https://bootepolch.monday.com"),
   MONDAY_SIGNING_SECRET: z.string().optional(),
-  JIRA_ACCOUNTS_JSON: z.string().optional()
-});
+  JIRA_ACCOUNTS_JSON: z.string().optional(),
+  ZIRA_ACCOUNTS_JSON: z.string().optional()
+}).passthrough();
 
 const parsedEnv = envSchema.safeParse(process.env);
 
@@ -45,9 +46,11 @@ function parseJiraAccounts(raw: string | undefined) {
   return parsed.data;
 }
 
+const rawJiraAccountsJson = parsedEnv.data.JIRA_ACCOUNTS_JSON ?? parsedEnv.data.ZIRA_ACCOUNTS_JSON;
+
 export const config = {
   ...parsedEnv.data,
-  jiraAccounts: parseJiraAccounts(parsedEnv.data.JIRA_ACCOUNTS_JSON)
+  jiraAccounts: parseJiraAccounts(rawJiraAccountsJson)
 };
 
 export type JiraAccountConfig = (typeof config.jiraAccounts)[number];
