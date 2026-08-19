@@ -212,7 +212,11 @@ async function loadProjects(accountId) {
 
   projectSelect.innerHTML = "";
   if (projects.length === 0) {
-    projectSelect.innerHTML = '<option value="">No projects found</option>';
+    projectSelect.innerHTML = '<option value="">No projects available for this account</option>';
+    setStatus(
+      "No Jira projects are visible for this account. Check the Atlassian token and make sure the user has access to at least one Jira project.",
+      "error"
+    );
     return;
   }
 
