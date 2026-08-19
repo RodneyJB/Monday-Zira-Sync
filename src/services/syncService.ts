@@ -260,7 +260,9 @@ async function runSyncMondayItemToJira(input: {
       const matchedIssue = await findJiraIssueByLabels({
         account: jiraAccount,
         projectKey: mapping.projectKey,
-        labels: mondayIdentityLabels
+        labels: mondayIdentityLabels,
+        boardId,
+        itemId
       });
 
       if (matchedIssue) {

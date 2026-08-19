@@ -45,6 +45,9 @@ type JiraSearchResponse = {
   issues?: Array<{
     id: string;
     key: string;
+    fields?: {
+      description?: unknown;
+    };
   }>;
 };
 
@@ -192,20 +195,47 @@ export async function listJiraProjects(account: JiraAccountConfig): Promise<Jira
   }));
 }
 
+export function buildMondayIssueLookupJql(input: {
+  projectKey: string;
+  labels: string[];
+  boardId?: string;
+  itemId?: string;
+}): string {
+  const escapedProject = input.projectKey.replace(/"/g, '\\"');
+  const clauses = [`project = "${escapedProject}"`];
+
+  const labels = input.labels.filter((label) => label.trim().length > 0);
+  for (const label of labels) {
+    clauses.push(`labels = "${label.replace(/"/g, '\\\"')}"`);
+  }
+
+  if (input.boardId && input.itemId) {
+    const mondayUrlPath = `boards/${input.boardId}/pulses/${input.itemId}`;
+    clauses.push(`description ~ "${mondayUrlPath}"`);
+  }
+
+  return `${clauses.join(" AND ")} ORDER BY created DESC`;
+}
+
 export async function findJiraIssueByLabels(input: {
   account: JiraAccountConfig;
   projectKey: string;
   labels: string[];
+  boardId?: string;
+  itemId?: string;
 }): Promise<JiraIssueMatch | null> {
-  const { account, projectKey } = input;
+  const { account, projectKey, boardId, itemId } = input;
   const labels = input.labels.filter((label) => label.trim().length > 0);
-  if (labels.length === 0) {
+  if (labels.length === 0 && !(boardId && itemId)) {
     return null;
   }
 
-  const escapedProject = projectKey.replace(/"/g, "\\\"");
-  const labelClauses = labels.map((label) => `labels = \"${label.replace(/\"/g, "\\\\\"")}\"`);
-  const jql = `project = \"${escapedProject}\" AND ${labelClauses.join(" AND ")} ORDER BY created DESC`;
+  const jql = buildMondayIssueLookupJql({
+    projectKey,
+    labels,
+    boardId,
+    itemId
+  });
 
   const url = new URL("/rest/api/3/search", account.baseUrl);
 
