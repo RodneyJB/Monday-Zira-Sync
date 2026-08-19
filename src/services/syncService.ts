@@ -39,7 +39,16 @@ function isJiraLookupUnavailableError(error: unknown): boolean {
 
   const response = (error as { response?: { status?: number } }).response;
   const status = response?.status;
-  return status === 404 || status === 405 || status === 410;
+  return (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 405 ||
+    status === 409 ||
+    status === 410 ||
+    status === 429
+  );
 }
 
 function errorMessage(error: unknown): string {
@@ -273,11 +282,17 @@ async function runSyncMondayItemToJira(input: {
         throw error;
       }
 
-      console.warn("Jira lookup by labels unavailable; continuing without lookup", {
+      const message =
+        "Jira issue lookup is unavailable for this project; refusing to create a new issue to avoid duplicates.";
+
+      console.warn("Jira lookup by labels unavailable; skipping sync to avoid duplicate issue creation", {
         boardId,
         itemId,
-        projectKey: mapping.projectKey
+        projectKey: mapping.projectKey,
+        detail: errorMessage(error)
       });
+
+      throw new Error(message);
     }
   }
 
