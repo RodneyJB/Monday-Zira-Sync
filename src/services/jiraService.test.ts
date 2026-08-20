@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildMondayIssueLookupJql } from "./jiraService.js";
+import {
+  buildMondayAssetUrl,
+  buildMondayIssueLookupJql,
+  shouldLinkAttachmentInDescription
+} from "./jiraService.js";
 import { normalizeLanguage } from "./translationService.js";
 
 test("buildMondayIssueLookupJql includes both labels and Monday item URL fallback", () => {
@@ -24,4 +28,13 @@ test("normalizeLanguage accepts common display names like Spain and Spanish", ()
   assert.equal(normalizeLanguage("French"), "fr");
   assert.equal(normalizeLanguage("German"), "de");
   assert.equal(normalizeLanguage("English"), "en");
+});
+
+test("large attachments should be linked in the Jira description instead of compressed", () => {
+  assert.equal(shouldLinkAttachmentInDescription(21 * 1024 * 1024), true);
+  assert.equal(shouldLinkAttachmentInDescription(20 * 1024 * 1024), false);
+  assert.equal(
+    buildMondayAssetUrl("https://mycompany.monday.com", "5100981950", "123456789", "asset-42"),
+    "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42"
+  );
 });

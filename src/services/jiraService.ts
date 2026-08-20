@@ -1,9 +1,4 @@
 import axios from "axios";
-import ffmpegStatic from "ffmpeg-static";
-import { spawn } from "node:child_process";
-import { promises as fs } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import type { JiraAccountConfig } from "../config.js";
 
@@ -83,6 +78,21 @@ type JiraIssueLabelsResponse = {
 };
 
 const mondayStatusLabelPrefix = "monday-status-";
+const MAX_JIRA_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
+
+export function shouldLinkAttachmentInDescription(fileSizeBytes: number): boolean {
+  return Number.isFinite(fileSizeBytes) && fileSizeBytes > MAX_JIRA_ATTACHMENT_SIZE_BYTES;
+}
+
+export function buildMondayAssetUrl(
+  mondayBaseUrl: string,
+  boardId: string,
+  itemId: string,
+  assetId: string
+): string {
+  const base = mondayBaseUrl.replace(/\/$/, "");
+  return `${base}/boards/${boardId}/pulses/${itemId}?asset_id=${assetId}`;
+}
 
 function normalizeStatus(status: string): string {
   return status.trim().toLowerCase();
@@ -425,66 +435,6 @@ export function sanitizeAttachmentFileName(fileName: string): string {
   return baseName.length > 0 ? baseName : "attachment.bin";
 }
 
-function isMovFileName(fileName: string): boolean {
-  return /\.mov$/i.test(fileName);
-}
-
-async function convertMovToMp4(inputBuffer: Buffer): Promise<Buffer> {
-  const ffmpegPath = String(ffmpegStatic || "");
-  if (!ffmpegPath) {
-    throw new Error("ffmpeg is not available for MOV conversion.");
-  }
-
-  const inputPath = join(tmpdir(), `jira-mov-${Date.now()}-${Math.random().toString(16).slice(2)}.mov`);
-  const outputPath = join(tmpdir(), `jira-mov-${Date.now()}-${Math.random().toString(16).slice(2)}.mp4`);
-
-  await fs.writeFile(inputPath, inputBuffer);
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      ffmpegPath,
-      [
-        "-y",
-        "-i",
-        inputPath,
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-movflags",
-        "+faststart",
-        outputPath
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] }
-    );
-
-    let stderr = "";
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", reject);
-    child.on("close", (code: number | null) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`ffmpeg conversion failed: ${stderr || "unknown error"}`));
-      }
-    });
-  });
-
-  try {
-    const converted = await fs.readFile(outputPath);
-    return Buffer.from(converted);
-  } finally {
-    await Promise.allSettled([
-      fs.rm(inputPath, { force: true }),
-      fs.rm(outputPath, { force: true })
-    ]);
-  }
-}
-
 export async function uploadJiraAttachmentFromUrl(input: {
   account: JiraAccountConfig;
   issueIdOrKey: string;
@@ -504,17 +454,16 @@ export async function uploadJiraAttachmentFromUrl(input: {
   const fileResponse = await axios.get(safeUrl, {
     responseType: "arraybuffer",
     timeout: 30000,
-    maxContentLength: 25 * 1024 * 1024,
-    maxBodyLength: 25 * 1024 * 1024,
+    maxContentLength: 50 * 1024 * 1024,
+    maxBodyLength: 50 * 1024 * 1024,
     validateStatus: (status) => status >= 200 && status < 300
   });
 
-  let fileBytes: Buffer = Buffer.from(fileResponse.data as ArrayBuffer);
-  let finalFileName = safeFileName;
+  const fileBytes: Buffer = Buffer.from(fileResponse.data as ArrayBuffer);
+  const finalFileName = safeFileName;
 
-  if (isMovFileName(safeFileName)) {
-    fileBytes = await convertMovToMp4(fileBytes);
-    finalFileName = safeFileName.replace(/\.mov$/i, ".mp4");
+  if (shouldLinkAttachmentInDescription(fileBytes.length)) {
+    throw new Error(`Attachment exceeds ${(MAX_JIRA_ATTACHMENT_SIZE_BYTES / (1024 * 1024)).toFixed(0)}MB and must be linked in Jira description.`);
   }
 
   const formData = new FormData();
@@ -527,8 +476,8 @@ export async function uploadJiraAttachmentFromUrl(input: {
       "X-Atlassian-Token": "no-check"
     },
     timeout: 60000,
-    maxContentLength: 25 * 1024 * 1024,
-    maxBodyLength: 25 * 1024 * 1024,
+    maxContentLength: 50 * 1024 * 1024,
+    maxBodyLength: 50 * 1024 * 1024,
     validateStatus: (status) => status >= 200 && status < 300
   });
 }
