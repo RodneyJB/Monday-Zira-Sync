@@ -6,6 +6,7 @@ import {
   extractAttachmentCandidatesFromFileColumnValue,
   shouldUploadAttachmentsForSync
 } from "./syncService.js";
+import { resolveMondayAssetPublicUrl } from "./mondayService.js";
 
 test("extractAssetIdsFromFileColumnValue handles object payloads from Monday file columns", () => {
   const result = extractAssetIdsFromFileColumnValue({
@@ -125,4 +126,14 @@ test("extractAttachmentCandidatesFromFileColumnValue ignores monday pulse pointe
   });
 
   assert.deepEqual(result, []);
+});
+
+test("resolveMondayAssetPublicUrl prefers the direct public URL over a monday asset pointer", () => {
+  assert.equal(
+    resolveMondayAssetPublicUrl({
+      url: "https://bootepolch.monday.com/boards/5100981950/pulses/3174553848?asset_id=987654321",
+      public_url: "https://cdn.example.com/images/small.png"
+    }),
+    "https://cdn.example.com/images/small.png"
+  );
 });

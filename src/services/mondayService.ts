@@ -211,6 +211,10 @@ export async function getMondayBoardSummary(boardId: string) {
   };
 }
 
+export function resolveMondayAssetPublicUrl(asset: { url?: string | null; public_url?: string | null }): string {
+  return asset.public_url || asset.url || "";
+}
+
 export async function getMondayItemForSync(itemId: string): Promise<MondaySyncItem> {
   const query = `
     query ($itemId: [ID!]) {
@@ -253,7 +257,7 @@ export async function getMondayItemForSync(itemId: string): Promise<MondaySyncIt
     assets: (item.assets ?? []).map((asset) => ({
       id: asset.id,
       name: asset.name,
-      publicUrl: asset.url ?? asset.public_url ?? "",
+      publicUrl: resolveMondayAssetPublicUrl(asset),
       fileExtension: asset.file_extension
     })),
     columnValues: (item.column_values ?? []).map((column) => ({

@@ -80,8 +80,24 @@ type JiraIssueLabelsResponse = {
 const mondayStatusLabelPrefix = "monday-status-";
 const MAX_JIRA_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
 
+export class JiraAttachmentSizeError extends Error {
+  constructor(fileSizeBytes: number) {
+    super(`Attachment exceeds ${(MAX_JIRA_ATTACHMENT_SIZE_BYTES / (1024 * 1024)).toFixed(0)}MB and must be linked in Jira description.`);
+    this.name = "JiraAttachmentSizeError";
+    this.message = `Attachment exceeds ${(MAX_JIRA_ATTACHMENT_SIZE_BYTES / (1024 * 1024)).toFixed(0)}MB and must be linked in Jira description.`;
+  }
+}
+
 export function shouldLinkAttachmentInDescription(fileSizeBytes: number): boolean {
   return Number.isFinite(fileSizeBytes) && fileSizeBytes > MAX_JIRA_ATTACHMENT_SIZE_BYTES;
+}
+
+export function isLargeAttachmentError(error: unknown): boolean {
+  if (error instanceof JiraAttachmentSizeError) {
+    return true;
+  }
+
+  return error instanceof Error && /must be linked in Jira description/i.test(error.message);
 }
 
 export function buildMondayAssetUrl(
@@ -473,7 +489,7 @@ export async function uploadJiraAttachmentFromUrl(input: {
   }
 
   if (shouldLinkAttachmentInDescription(fileBytes.length)) {
-    throw new Error(`Attachment exceeds ${(MAX_JIRA_ATTACHMENT_SIZE_BYTES / (1024 * 1024)).toFixed(0)}MB and must be linked in Jira description.`);
+    throw new JiraAttachmentSizeError(fileBytes.length);
   }
 
   const formData = new FormData();

@@ -4,6 +4,7 @@ import {
   buildMondayAssetUrl,
   createJiraIssue,
   findJiraIssueByLabels,
+  isLargeAttachmentError,
   listJiraPriorities,
   updateJiraIssueSummary,
   uploadJiraAttachmentFromUrl
@@ -607,26 +608,28 @@ async function runSyncMondayItemToJira(input: {
           reason: error instanceof Error ? error.message : String(error)
         });
 
-        const fallbackAssetUrl = buildMondayAssetUrl(
-          config.MONDAY_ACCOUNT_BASE_URL,
-          boardId,
-          itemId,
-          asset.id
-        );
+        if (isLargeAttachmentError(error)) {
+          const fallbackAssetUrl = buildMondayAssetUrl(
+            config.MONDAY_ACCOUNT_BASE_URL,
+            boardId,
+            itemId,
+            asset.id
+          );
 
-        const descriptionAppendix = `\n\nMonday asset: ${fallbackAssetUrl}`;
+          const descriptionAppendix = `\n\nMonday asset: ${fallbackAssetUrl}`;
 
-        try {
-          await updateJiraIssueSummary({
-            account: jiraAccount,
-            issueIdOrKey: issueKey,
-            summary,
-            description: `${`Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`} ${descriptionAppendix}`,
-            priorityName,
-            mondayItemUrl
-          });
-        } catch {
-          // Intentionally ignore fallback description update errors.
+          try {
+            await updateJiraIssueSummary({
+              account: jiraAccount,
+              issueIdOrKey: issueKey,
+              summary,
+              description: `${`Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`} ${descriptionAppendix}`,
+              priorityName,
+              mondayItemUrl
+            });
+          } catch {
+            // Intentionally ignore fallback description update errors.
+          }
         }
       }
     }
