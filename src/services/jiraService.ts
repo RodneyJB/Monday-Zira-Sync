@@ -83,43 +83,6 @@ type JiraIssueLabelsResponse = {
 };
 
 const mondayStatusLabelPrefix = "monday-status-";
-const MAX_JIRA_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
-
-export function shouldLinkAttachmentInDescription(fileSizeBytes: number): boolean {
-  return Number.isFinite(fileSizeBytes) && fileSizeBytes > MAX_JIRA_ATTACHMENT_SIZE_BYTES;
-}
-
-export function isHtmlAttachmentResponse(input: {
-  data: ArrayBuffer | Buffer;
-  contentType?: string | null;
-  fileName?: string;
-}): boolean {
-  const ct = (input.contentType ?? "").toLowerCase();
-  if (ct.includes("text/html") || ct.includes("application/xhtml+xml") || ct.includes("text/plain")) {
-    return true;
-  }
-
-  const view = Buffer.isBuffer(input.data) ? input.data : Buffer.from(input.data);
-  const trimmed = view.subarray(0, 256).toString("latin1").trim().toLowerCase();
-
-  return (
-    trimmed.startsWith("<!doctype html") ||
-    trimmed.startsWith("<html") ||
-    trimmed.includes("<title>monday.com") ||
-    trimmed.includes("window.pulse =") ||
-    trimmed.includes("login-monday-body")
-  );
-}
-
-export function buildMondayAssetUrl(
-  mondayBaseUrl: string,
-  boardId: string,
-  itemId: string,
-  assetId: string
-): string {
-  const base = mondayBaseUrl.replace(/\/$/, "");
-  return `${base}/boards/${boardId}/pulses/${itemId}?asset_id=${assetId}`;
-}
 
 function normalizeStatus(status: string): string {
   return status.trim().toLowerCase();
@@ -541,21 +504,17 @@ export async function uploadJiraAttachmentFromUrl(input: {
   const fileResponse = await axios.get(safeUrl, {
     responseType: "arraybuffer",
     timeout: 30000,
-    maxContentLength: 50 * 1024 * 1024,
-    maxBodyLength: 50 * 1024 * 1024,
+    maxContentLength: 25 * 1024 * 1024,
+    maxBodyLength: 25 * 1024 * 1024,
     validateStatus: (status) => status >= 200 && status < 300
   });
 
-  const fileBytes: Buffer = Buffer.from(fileResponse.data as ArrayBuffer);
-  const contentType = String(fileResponse.headers?.["content-type"] ?? "");
-  const finalFileName = safeFileName;
+  let fileBytes: Buffer = Buffer.from(fileResponse.data as ArrayBuffer);
+  let finalFileName = safeFileName;
 
-  if (isHtmlAttachmentResponse({ data: fileBytes, contentType, fileName: finalFileName })) {
-    throw new Error("Downloaded content is HTML instead of a file binary; refusing to upload.");
-  }
-
-  if (fileBytes.length > MAX_JIRA_ATTACHMENT_SIZE_BYTES) {
-    throw new Error(`Attachment exceeds ${MAX_JIRA_ATTACHMENT_SIZE_BYTES / (1024 * 1024)}MB and must be linked in Jira description.`);
+  if (isMovFileName(safeFileName)) {
+    fileBytes = await convertMovToMp4(fileBytes);
+    finalFileName = safeFileName.replace(/\.mov$/i, ".mp4");
   }
 
   const formData = new FormData();
@@ -568,8 +527,8 @@ export async function uploadJiraAttachmentFromUrl(input: {
       "X-Atlassian-Token": "no-check"
     },
     timeout: 60000,
-    maxContentLength: 50 * 1024 * 1024,
-    maxBodyLength: 50 * 1024 * 1024,
+    maxContentLength: 25 * 1024 * 1024,
+    maxBodyLength: 25 * 1024 * 1024,
     validateStatus: (status) => status >= 200 && status < 300
   });
 }

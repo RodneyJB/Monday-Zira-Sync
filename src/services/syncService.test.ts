@@ -6,11 +6,6 @@ import {
   extractAttachmentCandidatesFromFileColumnValue,
   shouldUploadAttachmentsForSync
 } from "./syncService.js";
-import {
-  buildMondayAssetUrl,
-  isHtmlAttachmentResponse,
-  shouldLinkAttachmentInDescription
-} from "./jiraService.js";
 
 test("extractAssetIdsFromFileColumnValue handles object payloads from Monday file columns", () => {
   const result = extractAssetIdsFromFileColumnValue({
@@ -104,23 +99,4 @@ test("resolveAssetsFromMapping uses a Monday text fallback when file-column valu
     result.map((entry) => entry.publicUrl),
     ["https://cdn.example.com/uploads/clip.mp4"]
   );
-});
-
-test("shouldLinkAttachmentInDescription triggers above 20MB", () => {
-  assert.equal(shouldLinkAttachmentInDescription(21 * 1024 * 1024), true);
-  assert.equal(shouldLinkAttachmentInDescription(20 * 1024 * 1024), false);
-  assert.equal(shouldLinkAttachmentInDescription(10 * 1024 * 1024), false);
-});
-
-test("buildMondayAssetUrl creates a direct Monday asset link for Jira description fallback", () => {
-  assert.equal(
-    buildMondayAssetUrl("https://bootepolch.monday.com", "5101729142", "3156414502", "257275188"),
-    "https://bootepolch.monday.com/boards/5101729142/pulses/3156414502?asset_id=257275188"
-  );
-});
-
-test("isHtmlAttachmentResponse rejects Monday login HTML as a file payload", () => {
-  const html = Buffer.from("<!DOCTYPE html><html><head><title>monday.com: Where Teams Get Work Done</title></head><body>login</body></html>");
-  assert.equal(isHtmlAttachmentResponse({ data: html, contentType: "text/html; charset=utf-8" }), true);
-  assert.equal(isHtmlAttachmentResponse({ data: Buffer.from([0x89, 0x50, 0x4e, 0x47]), contentType: "image/png" }), false);
 });
