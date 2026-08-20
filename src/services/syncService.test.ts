@@ -8,8 +8,7 @@ import {
 } from "./syncService.js";
 import {
   buildMondayAssetUrl,
-  shouldCompressAttachmentForUpload,
-  shouldZipAttachmentForUpload
+  shouldLinkAttachmentInDescription
 } from "./jiraService.js";
 
 test("extractAssetIdsFromFileColumnValue handles object payloads from Monday file columns", () => {
@@ -106,18 +105,10 @@ test("resolveAssetsFromMapping uses a Monday text fallback when file-column valu
   );
 });
 
-test("shouldCompressAttachmentForUpload compresses large video uploads to 15MB", () => {
-  assert.equal(shouldCompressAttachmentForUpload("clip.mp4", 16 * 1024 * 1024), true);
-  assert.equal(shouldCompressAttachmentForUpload("clip.mov", 20 * 1024 * 1024), true);
-  assert.equal(shouldCompressAttachmentForUpload("clip.mp4", 14 * 1024 * 1024), false);
-  assert.equal(shouldCompressAttachmentForUpload("notes.txt", 20 * 1024 * 1024), false);
-});
-
-test("shouldZipAttachmentForUpload triggers for oversized videos after compression", () => {
-  assert.equal(shouldZipAttachmentForUpload("clip.mp4", 20 * 1024 * 1024), true);
-  assert.equal(shouldZipAttachmentForUpload("clip.mov", 16 * 1024 * 1024), true);
-  assert.equal(shouldZipAttachmentForUpload("clip.mp4", 10 * 1024 * 1024), false);
-  assert.equal(shouldZipAttachmentForUpload("notes.txt", 20 * 1024 * 1024), false);
+test("shouldLinkAttachmentInDescription triggers above 20MB", () => {
+  assert.equal(shouldLinkAttachmentInDescription(21 * 1024 * 1024), true);
+  assert.equal(shouldLinkAttachmentInDescription(20 * 1024 * 1024), false);
+  assert.equal(shouldLinkAttachmentInDescription(10 * 1024 * 1024), false);
 });
 
 test("buildMondayAssetUrl creates a direct Monday asset link for Jira description fallback", () => {
