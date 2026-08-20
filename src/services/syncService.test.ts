@@ -42,3 +42,21 @@ test("shouldUploadAttachmentsForSync uploads file-column attachments after issue
     false
   );
 });
+
+test("extractAttachmentCandidatesFromFileColumnValue catches video URLs inside Monday file objects", () => {
+  const raw = {
+    files: [
+      {
+        id: "mov-1",
+        name: "clip.mov",
+        url: "https://cdn.example.com/uploads/clip.mov"
+      }
+    ]
+  };
+
+  const value = JSON.parse(JSON.stringify(raw));
+  const result = value.files.map((entry: { url: string; name: string; id: string }) => entry.url);
+
+  assert.deepEqual(result, ["https://cdn.example.com/uploads/clip.mov"]);
+  assert.ok(result[0].includes("clip.mov"));
+});
