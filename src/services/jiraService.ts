@@ -166,7 +166,11 @@ function jiraHeaders(account: JiraAccountConfig) {
   };
 }
 
-function buildJiraDescriptionDoc(description: string, mondayItemUrl?: string): {
+export function buildJiraDescriptionDoc(
+  description: string,
+  mondayItemUrl?: string,
+  attachmentFallbackLink?: { text: string; href: string }
+): {
   type: string;
   version: number;
   content: JiraDocNode[];
@@ -182,6 +186,26 @@ function buildJiraDescriptionDoc(description: string, mondayItemUrl?: string): {
       ]
     }
   ];
+
+  if (attachmentFallbackLink) {
+    content.push({
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: attachmentFallbackLink.text,
+          marks: [
+            {
+              type: "link",
+              attrs: {
+                href: attachmentFallbackLink.href
+              }
+            }
+          ]
+        }
+      ]
+    });
+  }
 
   if (mondayItemUrl) {
     content.push({
@@ -304,9 +328,10 @@ export async function createJiraIssue(input: {
   description?: string;
   priorityName?: string;
   mondayItemUrl?: string;
+  attachmentFallbackLink?: { text: string; href: string };
   labels?: string[];
 }): Promise<JiraCreatedIssue> {
-  const { account, projectKey, summary, description, priorityName, mondayItemUrl, labels } = input;
+  const { account, projectKey, summary, description, priorityName, mondayItemUrl, attachmentFallbackLink, labels } = input;
 
   const url = new URL("/rest/api/3/issue", account.baseUrl);
   const buildPayload = (includePriority: boolean) => ({
@@ -328,7 +353,8 @@ export async function createJiraIssue(input: {
       ...(labels && labels.length > 0 ? { labels } : {}),
       description: buildJiraDescriptionDoc(
         description ?? "Created automatically from Monday board item.",
-        mondayItemUrl
+        mondayItemUrl,
+        attachmentFallbackLink
       )
     }
   });
@@ -366,8 +392,9 @@ export async function updateJiraIssueSummary(input: {
   description?: string;
   priorityName?: string;
   mondayItemUrl?: string;
+  attachmentFallbackLink?: { text: string; href: string };
 }): Promise<void> {
-  const { account, issueIdOrKey, summary, description, priorityName, mondayItemUrl } = input;
+  const { account, issueIdOrKey, summary, description, priorityName, mondayItemUrl, attachmentFallbackLink } = input;
   const url = new URL(`/rest/api/3/issue/${issueIdOrKey}`, account.baseUrl);
 
   const buildPayload = (includePriority: boolean) => ({
@@ -382,7 +409,8 @@ export async function updateJiraIssueSummary(input: {
         : {}),
       description: buildJiraDescriptionDoc(
         description ?? "Updated automatically from Monday board item.",
-        mondayItemUrl
+        mondayItemUrl,
+        attachmentFallbackLink
       )
     }
   });

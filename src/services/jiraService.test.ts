@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildJiraDescriptionDoc,
   buildMondayAssetUrl,
   buildMondayIssueLookupJql,
   shouldLinkAttachmentInDescription
@@ -37,4 +38,13 @@ test("large attachments should be linked in the Jira description instead of comp
     buildMondayAssetUrl("https://mycompany.monday.com", "5100981950", "123456789", "asset-42"),
     "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42"
   );
+
+  const doc = buildJiraDescriptionDoc(
+    "Updated from Monday board 1500#005 XC (NB)",
+    "https://mycompany.monday.com/boards/5100981950/pulses/123456789",
+    { text: "Monday file", href: "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42" }
+  );
+
+  assert.equal(doc.content[1].content[0].text, "Monday file");
+  assert.equal(doc.content[1].content[0].marks?.[0].attrs.href, "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42");
 });

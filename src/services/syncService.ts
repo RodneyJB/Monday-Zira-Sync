@@ -616,16 +616,18 @@ async function runSyncMondayItemToJira(input: {
             asset.id
           );
 
-          const descriptionAppendix = `\n\nMonday asset: ${fallbackAssetUrl}`;
-
           try {
             await updateJiraIssueSummary({
               account: jiraAccount,
               issueIdOrKey: issueKey,
               summary,
-              description: `${`Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`} ${descriptionAppendix}`,
+              description: `Updated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
               priorityName,
-              mondayItemUrl
+              mondayItemUrl,
+              attachmentFallbackLink: {
+                text: "Monday file",
+                href: fallbackAssetUrl
+              }
             });
           } catch {
             // Intentionally ignore fallback description update errors.
