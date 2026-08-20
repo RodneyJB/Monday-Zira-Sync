@@ -10,7 +10,11 @@ import {
   getMondayBoardSummary,
   getMondayMe
 } from "../services/mondayService.js";
-import { clearSyncedItemsForBoard, getSyncedItem } from "../services/syncStateStore.js";
+import {
+  clearSyncedItemsForBoard,
+  getSyncedItem,
+  listSyncedItemsForBoard
+} from "../services/syncStateStore.js";
 import { syncMondayItemToJira } from "../services/syncService.js";
 
 const optionalTextField = z.preprocess(
@@ -63,32 +67,7 @@ const saveMappingSchema = z.object({
   attachmentSource: z.enum(["item_assets", "file_column"]).default("item_assets"),
   attachmentColumnId: optionalTextField,
   nameTranslations: optionalTranslationMap.default({}),
-  targetLanguage: z
-    .enum([
-      "none",
-      "en",
-      "de",
-      "fr",
-      "es",
-      "it",
-      "nl",
-      "pl",
-      "pt",
-      "sv",
-      "da",
-      "no",
-      "fi",
-      "cs",
-      "sk",
-      "sl",
-      "hr",
-      "hu",
-      "ro",
-      "bg",
-      "el",
-      "tr"
-    ])
-    .default("none")
+  targetLanguage: z.enum(["none", "en", "de", "fr", "es"]).default("none")
 });
 
 const syncItemSchema = z.object({
@@ -359,6 +338,18 @@ apiRouter.get("/mapping", async (req, res) => {
 
   const mapping = await getBoardMapping(boardId);
   res.json({ mapping });
+});
+
+apiRouter.get("/sync/connections", async (req, res) => {
+  const boardId = req.query.boardId;
+
+  if (typeof boardId !== "string" || boardId.length === 0) {
+    res.status(400).json({ error: "boardId query parameter is required" });
+    return;
+  }
+
+  const connections = await listSyncedItemsForBoard(boardId);
+  res.json({ connections });
 });
 
 apiRouter.post("/mapping", async (req, res) => {

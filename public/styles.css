@@ -157,6 +157,71 @@ button {
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
+.connection-box {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px 14px;
+  background: #fbfdff;
+}
+
+.connection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.connection-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.connection-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.connection-list {
+  display: grid;
+  gap: 8px;
+}
+
+.connection-item {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.connection-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.connection-value {
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.empty-state {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .action-row {
   display: grid;
   gap: 10px;

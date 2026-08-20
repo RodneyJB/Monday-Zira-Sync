@@ -47,6 +47,18 @@ export async function getSyncedItem(boardId: string, itemId: string): Promise<Sy
   return cache.get(makeKey(boardId, itemId)) ?? null;
 }
 
+export async function listSyncedItemsForBoard(boardId: string): Promise<Array<Pick<SyncedItemRecord, "itemId" | "issueKey">>> {
+  await loadStore();
+
+  return [...cache.values()]
+    .filter((entry) => entry.boardId === boardId)
+    .map((entry) => ({
+      itemId: entry.itemId,
+      issueKey: entry.issueKey
+    }))
+    .sort((left, right) => left.itemId.localeCompare(right.itemId, "en", { numeric: true }));
+}
+
 export async function setSyncedItem(input: {
   boardId: string;
   itemId: string;

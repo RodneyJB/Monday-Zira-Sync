@@ -210,10 +210,10 @@ async function fetchAllProjectIssues(account: JiraAccount, projectKey: string): 
   while (startAt < total) {
     const page = await jiraRequest<JiraSearchResponse>({
       account,
-      path: "/rest/api/3/search",
+      path: "/rest/api/3/search/jql",
       method: "POST",
       body: {
-        jql: `project = ${projectKey} ORDER BY created ASC`,
+        jql: `project = "${projectKey}" ORDER BY created ASC`,
         startAt,
         maxResults: pageSize,
         fields: ["summary", "description", "created"]

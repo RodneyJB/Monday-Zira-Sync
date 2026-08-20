@@ -13,6 +13,8 @@ const attachmentColumnIdSelect = document.getElementById("attachmentColumnIdSele
 const saveButton = document.getElementById("saveButton");
 const resetBoardButton = document.getElementById("resetBoardButton");
 const boardIdLabel = document.getElementById("boardIdLabel");
+const connectionList = document.getElementById("connectionList");
+const connectionCountBadge = document.getElementById("connectionCountBadge");
 const statusEl = document.getElementById("status");
 
 let boardId = "";
@@ -228,6 +230,41 @@ async function loadProjects(accountId) {
   projectSelect.disabled = false;
 }
 
+function renderConnections(connections = []) {
+  const safeConnections = Array.isArray(connections) ? connections : [];
+  connectionCountBadge.textContent = String(safeConnections.length);
+
+  if (!safeConnections.length) {
+    connectionList.innerHTML = '<p class="empty-state">No synced links yet for this board.</p>';
+    return;
+  }
+
+  connectionList.innerHTML = safeConnections
+    .map(
+      (connection) => `
+        <div class="connection-item">
+          <div class="connection-label">Monday item ${connection.itemId}</div>
+          <div class="connection-value">→ ${connection.issueKey}</div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+async function loadConnections() {
+  if (!boardId) {
+    renderConnections([]);
+    return;
+  }
+
+  try {
+    const data = await fetchJson(`/api/sync/connections?boardId=${encodeURIComponent(boardId)}`);
+    renderConnections(data.connections || []);
+  } catch {
+    renderConnections([]);
+  }
+}
+
 async function loadExistingMapping() {
   if (!boardId) {
     return;
@@ -236,6 +273,7 @@ async function loadExistingMapping() {
   const data = await fetchJson(`/api/mapping?boardId=${encodeURIComponent(boardId)}`);
   const mapping = data.mapping;
   if (!mapping) {
+    renderConnections([]);
     return;
   }
 
@@ -259,6 +297,7 @@ async function loadExistingMapping() {
   refreshRuleFieldState();
   setStatus(`Current mapping: ${mapping.projectName} (${mapping.projectKey})`, "ok");
   setSaveEnabled();
+  await loadConnections();
 }
 
 accountSelect.addEventListener("change", async () => {
@@ -361,6 +400,8 @@ saveButton.addEventListener("click", async () => {
     } else {
       setStatus("Saved. Sync project, rule, and field mapping are now active.", "ok");
     }
+
+    await loadConnections();
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Could not save mapping", "error");
   } finally {
@@ -396,6 +437,7 @@ resetBoardButton.addEventListener("click", async () => {
       `Reset complete for board ${boardId}. Cleared ${data.count || 0} synced item links. New syncs will create fresh Jira issues.`,
       "ok"
     );
+    await loadConnections();
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Could not reset board sync links", "error");
   } finally {

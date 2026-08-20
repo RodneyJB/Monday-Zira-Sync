@@ -1,27 +1,4 @@
-const supportedLanguages = new Set([
-  "none",
-  "en",
-  "de",
-  "fr",
-  "es",
-  "it",
-  "nl",
-  "pl",
-  "pt",
-  "sv",
-  "da",
-  "no",
-  "fi",
-  "cs",
-  "sk",
-  "sl",
-  "hr",
-  "hu",
-  "ro",
-  "bg",
-  "el",
-  "tr"
-]);
+const supportedLanguages = new Set(["none", "en", "de", "fr", "es"]);
 
 function normalizeLanguage(language: string | undefined): string {
   const code = (language ?? "none").trim().toLowerCase();

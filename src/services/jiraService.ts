@@ -237,7 +237,7 @@ export async function findJiraIssueByLabels(input: {
     itemId
   });
 
-  const url = new URL("/rest/api/3/search", account.baseUrl);
+  const url = new URL("/rest/api/3/search/jql", account.baseUrl);
 
   const response = await axios.post<JiraSearchResponse>(
     url.toString(),
