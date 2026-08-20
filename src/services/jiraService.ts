@@ -111,6 +111,16 @@ export function shouldZipAttachmentForUpload(fileName: string, fileSizeBytes: nu
   return lowerName.endsWith(".mov") || lowerName.endsWith(".mp4") || lowerName.endsWith(".m4v") || lowerName.endsWith(".avi");
 }
 
+export function buildMondayAssetUrl(
+  mondayBaseUrl: string,
+  boardId: string,
+  itemId: string,
+  assetId: string
+): string {
+  const base = mondayBaseUrl.replace(/\/$/, "");
+  return `${base}/boards/${boardId}/pulses/${itemId}?asset_id=${assetId}`;
+}
+
 function normalizeStatus(status: string): string {
   return status.trim().toLowerCase();
 }

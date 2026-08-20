@@ -6,7 +6,11 @@ import {
   extractAttachmentCandidatesFromFileColumnValue,
   shouldUploadAttachmentsForSync
 } from "./syncService.js";
-import { shouldCompressAttachmentForUpload, shouldZipAttachmentForUpload } from "./jiraService.js";
+import {
+  buildMondayAssetUrl,
+  shouldCompressAttachmentForUpload,
+  shouldZipAttachmentForUpload
+} from "./jiraService.js";
 
 test("extractAssetIdsFromFileColumnValue handles object payloads from Monday file columns", () => {
   const result = extractAssetIdsFromFileColumnValue({
@@ -114,4 +118,11 @@ test("shouldZipAttachmentForUpload triggers for oversized videos after compressi
   assert.equal(shouldZipAttachmentForUpload("clip.mov", 16 * 1024 * 1024), true);
   assert.equal(shouldZipAttachmentForUpload("clip.mp4", 10 * 1024 * 1024), false);
   assert.equal(shouldZipAttachmentForUpload("notes.txt", 20 * 1024 * 1024), false);
+});
+
+test("buildMondayAssetUrl creates a direct Monday asset link for Jira description fallback", () => {
+  assert.equal(
+    buildMondayAssetUrl("https://bootepolch.monday.com", "5101729142", "3156414502", "257275188"),
+    "https://bootepolch.monday.com/boards/5101729142/pulses/3156414502?asset_id=257275188"
+  );
 });
