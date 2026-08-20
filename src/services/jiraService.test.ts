@@ -45,6 +45,9 @@ test("large attachments should be linked in the Jira description instead of comp
     { text: "Monday file", href: "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42" }
   );
 
-  assert.equal(doc.content[1].content[0].text, "Monday file");
-  assert.equal(doc.content[1].content[0].marks?.[0].attrs.href, "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42");
+  const fallbackParagraph = doc.content[1];
+  const fallbackText = fallbackParagraph?.content?.[0];
+
+  assert.equal(fallbackText?.text, "Monday file");
+  assert.equal(fallbackText?.marks?.[0]?.attrs.href, "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42");
 });
