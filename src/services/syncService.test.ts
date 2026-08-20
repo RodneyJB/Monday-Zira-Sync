@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { extractAssetIdsFromFileColumnValue, shouldUploadAttachmentsForSync } from "./syncService.js";
+import {
+  extractAssetIdsFromFileColumnValue,
+  extractAttachmentCandidatesFromFileColumnValue,
+  shouldUploadAttachmentsForSync
+} from "./syncService.js";
 
 test("extractAssetIdsFromFileColumnValue handles object payloads from Monday file columns", () => {
   const result = extractAssetIdsFromFileColumnValue({
@@ -59,4 +63,27 @@ test("extractAttachmentCandidatesFromFileColumnValue catches video URLs inside M
 
   assert.deepEqual(result, ["https://cdn.example.com/uploads/clip.mov"]);
   assert.ok(result[0].includes("clip.mov"));
+});
+
+test("extractAttachmentCandidatesFromFileColumnValue finds nested video URLs in Monday file-column payloads", () => {
+  const raw = {
+    value: {
+      files: [
+        {
+          id: "mov-2",
+          metadata: {
+            name: "clip.mov",
+            source: "https://cdn.example.com/uploads/clip.mov"
+          }
+        }
+      ]
+    }
+  };
+
+  const result = extractAttachmentCandidatesFromFileColumnValue(raw);
+
+  assert.deepEqual(
+    result.map((entry) => entry.publicUrl),
+    ["https://cdn.example.com/uploads/clip.mov"]
+  );
 });

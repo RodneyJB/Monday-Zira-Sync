@@ -194,7 +194,7 @@ function inferAttachmentExtension(fileName: string | undefined): string {
   return extension && extension.length <= 8 ? extension : "bin";
 }
 
-function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown): Array<{
+export function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown): Array<{
   id: string;
   name: string;
   publicUrl: string;
@@ -212,6 +212,26 @@ function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown): Arra
   }> = [];
   const seen = new Set<string>();
 
+  const addCandidate = (publicUrl: string, name?: string, idOverride?: string): void => {
+    const trimmed = publicUrl.trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return;
+    }
+
+    const key = `url:${trimmed}`;
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    candidates.push({
+      id: idOverride || key,
+      name: name || `attachment-${Date.now()}`,
+      publicUrl: trimmed,
+      fileExtension: inferAttachmentExtension(name || undefined)
+    });
+  };
+
   const collect = (value: unknown, parentName?: string): void => {
     if (value === undefined || value === null) {
       return;
@@ -228,18 +248,7 @@ function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown): Arra
         collect(parsed, parentName);
         return;
       } catch {
-        if (/^https?:\/\//i.test(trimmed)) {
-          const key = `url:${trimmed}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            candidates.push({
-              id: key,
-              name: parentName || `attachment-${Date.now()}`,
-              publicUrl: trimmed,
-              fileExtension: inferAttachmentExtension(parentName || undefined)
-            });
-          }
-        }
+        addCandidate(trimmed, parentName);
       }
 
       return;
@@ -264,57 +273,33 @@ function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown): Arra
             ? record.filename
             : typeof record.title === "string"
               ? record.title
-              : parentName;
+              : typeof record.originalName === "string"
+                ? record.originalName
+                : parentName;
 
-    const possibleUrl = Object.entries(record).find(([key, entry]) => {
-      if (typeof entry !== "string") {
-        return false;
-      }
+    const directUrlCandidates = [
+      record.publicUrl,
+      record.public_url,
+      record.fileUrl,
+      record.file_url,
+      record.url,
+      record.downloadUrl,
+      record.download_url,
+      record.href,
+      record.link,
+      record.source,
+      record.src,
+      record.mediaUrl,
+      record.media_url
+    ].filter((entry): entry is string => typeof entry === "string" && /^https?:\/\//i.test(entry));
 
-      const lowered = key.toLowerCase();
-      return /^https?:\/\//i.test(entry) &&
-        (lowered.includes("url") || lowered.includes("link") || lowered.includes("href") || lowered.includes("file") || lowered.includes("download") || lowered.includes("media") || lowered.includes("asset"));
-    })?.[1] as string | undefined;
-
-    if (possibleUrl) {
-      const idCandidate =
-        [
-          record.assetId,
-          record.asset_id,
-          record.fileId,
-          record.file_id,
-          record.id,
-          record.uuid,
-          record.value,
-          possibleUrl
-        ].find((entry): entry is string | number => typeof entry === "string" || typeof entry === "number");
-
-      const id = typeof idCandidate === "string" ? idCandidate.trim() : String(idCandidate ?? possibleUrl);
-      const name = objectName || `attachment-${id}`;
-      const key = `url:${possibleUrl}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        candidates.push({
-          id,
-          name,
-          publicUrl: possibleUrl,
-          fileExtension: inferAttachmentExtension(name)
-        });
-      }
+    for (const publicUrl of directUrlCandidates) {
+      addCandidate(publicUrl, objectName, record.id ? String(record.id) : undefined);
     }
 
     for (const [key, entry] of Object.entries(record)) {
       if (typeof entry === "string" && /^https?:\/\//i.test(entry.trim())) {
-        const urlKey = `url:${entry.trim()}`;
-        if (!seen.has(urlKey)) {
-          seen.add(urlKey);
-          candidates.push({
-            id: `${key}:${entry.trim()}`,
-            name: objectName || key,
-            publicUrl: entry.trim(),
-            fileExtension: inferAttachmentExtension(objectName || key)
-          });
-        }
+        addCandidate(entry.trim(), objectName || key, `${key}:${entry.trim()}`);
       }
     }
 
