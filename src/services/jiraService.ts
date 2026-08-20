@@ -518,7 +518,7 @@ export async function uploadJiraAttachmentFromUrl(input: {
   }
 
   const formData = new FormData();
-  formData.append("file", new Blob([fileBytes]), finalFileName);
+  formData.append("file", new Blob([new Uint8Array(fileBytes)]), finalFileName);
 
   await axios.post(uploadUrl.toString(), formData, {
     headers: {
