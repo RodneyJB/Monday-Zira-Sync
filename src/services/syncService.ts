@@ -113,7 +113,7 @@ async function resolveSummaryFromMapping(
   });
 }
 
-function extractAssetIdsFromFileColumnValue(rawValue: string): string[] {
+export function extractAssetIdsFromFileColumnValue(rawValue: string): string[] {
   if (!rawValue) {
     return [];
   }
@@ -122,18 +122,50 @@ function extractAssetIdsFromFileColumnValue(rawValue: string): string[] {
     const parsed = JSON.parse(rawValue) as {
       files?: Array<Record<string, unknown>>;
       assets?: Array<Record<string, unknown>>;
+      value?: Array<Record<string, unknown>>;
     };
 
-    const entries = [...(parsed.files ?? []), ...(parsed.assets ?? [])];
+    const entries = [
+      ...(parsed.files ?? []),
+      ...(parsed.assets ?? []),
+      ...(parsed.value ?? [])
+    ];
+
     return entries
       .map((entry) => {
-        const value = entry.assetId ?? entry.asset_id ?? entry.id;
-        if (typeof value === "number") {
-          return String(value);
+        const candidate =
+          entry.assetId ??
+          entry.asset_id ??
+          entry.fileId ??
+          entry.file_id ??
+          entry.id ??
+          entry.uuid ??
+          entry.value;
+
+        if (typeof candidate === "number") {
+          return String(candidate);
         }
 
-        if (typeof value === "string") {
-          return value;
+        if (typeof candidate === "string") {
+          return candidate;
+        }
+
+        if (candidate && typeof candidate === "object") {
+          const nested =
+            (candidate as Record<string, unknown>).assetId ??
+            (candidate as Record<string, unknown>).asset_id ??
+            (candidate as Record<string, unknown>).fileId ??
+            (candidate as Record<string, unknown>).file_id ??
+            (candidate as Record<string, unknown>).id ??
+            (candidate as Record<string, unknown>).uuid;
+
+          if (typeof nested === "string") {
+            return nested;
+          }
+
+          if (typeof nested === "number") {
+            return String(nested);
+          }
         }
 
         return "";

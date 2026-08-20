@@ -1,9 +1,26 @@
 const supportedLanguages = new Set(["none", "en", "de", "fr", "es"]);
+const languageAliases: Record<string, string> = {
+  english: "en",
+  german: "de",
+  french: "fr",
+  spanish: "es",
+  spain: "es",
+  en: "en",
+  de: "de",
+  fr: "fr",
+  es: "es"
+};
 
-function normalizeLanguage(language: string | undefined): string {
-  const code = (language ?? "none").trim().toLowerCase();
-  if (supportedLanguages.has(code)) {
-    return code;
+export function normalizeLanguage(language: string | undefined): string {
+  const raw = (language ?? "none").trim();
+  const key = raw.toLowerCase();
+
+  if (supportedLanguages.has(key)) {
+    return key;
+  }
+
+  if (languageAliases[key]) {
+    return languageAliases[key];
   }
 
   return "none";

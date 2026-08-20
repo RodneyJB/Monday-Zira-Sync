@@ -186,7 +186,7 @@ export async function getMondayBoardSummary(boardId: string) {
       boards(ids: $boardId) {
         id
         name
-        items_page(limit: 25) {
+        items_page(limit: 100) {
           items {
             id
             name
