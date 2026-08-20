@@ -1,4 +1,9 @@
 import axios from "axios";
+import ffmpegStatic from "ffmpeg-static";
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { JiraAccountConfig } from "../config.js";
 
@@ -420,6 +425,66 @@ export function sanitizeAttachmentFileName(fileName: string): string {
   return baseName.length > 0 ? baseName : "attachment.bin";
 }
 
+function isMovFileName(fileName: string): boolean {
+  return /\.mov$/i.test(fileName);
+}
+
+async function convertMovToMp4(inputBuffer: Buffer): Promise<Buffer> {
+  const ffmpegPath = String(ffmpegStatic || "");
+  if (!ffmpegPath) {
+    throw new Error("ffmpeg is not available for MOV conversion.");
+  }
+
+  const inputPath = join(tmpdir(), `jira-mov-${Date.now()}-${Math.random().toString(16).slice(2)}.mov`);
+  const outputPath = join(tmpdir(), `jira-mov-${Date.now()}-${Math.random().toString(16).slice(2)}.mp4`);
+
+  await fs.writeFile(inputPath, inputBuffer);
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      ffmpegPath,
+      [
+        "-y",
+        "-i",
+        inputPath,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        outputPath
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code: number | null) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`ffmpeg conversion failed: ${stderr || "unknown error"}`));
+      }
+    });
+  });
+
+  try {
+    const converted = await fs.readFile(outputPath);
+    return Buffer.from(converted);
+  } finally {
+    await Promise.allSettled([
+      fs.rm(inputPath, { force: true }),
+      fs.rm(outputPath, { force: true })
+    ]);
+  }
+}
+
 export async function uploadJiraAttachmentFromUrl(input: {
   account: JiraAccountConfig;
   issueIdOrKey: string;
@@ -444,9 +509,16 @@ export async function uploadJiraAttachmentFromUrl(input: {
     validateStatus: (status) => status >= 200 && status < 300
   });
 
-  const fileBytes = Buffer.from(fileResponse.data as ArrayBuffer);
+  let fileBytes = Buffer.from(fileResponse.data as ArrayBuffer);
+  let finalFileName = safeFileName;
+
+  if (isMovFileName(safeFileName)) {
+    fileBytes = await convertMovToMp4(fileBytes);
+    finalFileName = safeFileName.replace(/\.mov$/i, ".mp4");
+  }
+
   const formData = new FormData();
-  formData.append("file", new Blob([fileBytes]), safeFileName);
+  formData.append("file", new Blob([fileBytes]), finalFileName);
 
   await axios.post(uploadUrl.toString(), formData, {
     headers: {
