@@ -6,6 +6,7 @@ import {
   extractAttachmentCandidatesFromFileColumnValue,
   shouldUploadAttachmentsForSync
 } from "./syncService.js";
+import { shouldCompressAttachmentForUpload, shouldZipAttachmentForUpload } from "./jiraService.js";
 
 test("extractAssetIdsFromFileColumnValue handles object payloads from Monday file columns", () => {
   const result = extractAssetIdsFromFileColumnValue({
@@ -99,4 +100,18 @@ test("resolveAssetsFromMapping uses a Monday text fallback when file-column valu
     result.map((entry) => entry.publicUrl),
     ["https://cdn.example.com/uploads/clip.mp4"]
   );
+});
+
+test("shouldCompressAttachmentForUpload compresses large video uploads to 15MB", () => {
+  assert.equal(shouldCompressAttachmentForUpload("clip.mp4", 16 * 1024 * 1024), true);
+  assert.equal(shouldCompressAttachmentForUpload("clip.mov", 20 * 1024 * 1024), true);
+  assert.equal(shouldCompressAttachmentForUpload("clip.mp4", 14 * 1024 * 1024), false);
+  assert.equal(shouldCompressAttachmentForUpload("notes.txt", 20 * 1024 * 1024), false);
+});
+
+test("shouldZipAttachmentForUpload triggers for oversized videos after compression", () => {
+  assert.equal(shouldZipAttachmentForUpload("clip.mp4", 20 * 1024 * 1024), true);
+  assert.equal(shouldZipAttachmentForUpload("clip.mov", 16 * 1024 * 1024), true);
+  assert.equal(shouldZipAttachmentForUpload("clip.mp4", 10 * 1024 * 1024), false);
+  assert.equal(shouldZipAttachmentForUpload("notes.txt", 20 * 1024 * 1024), false);
 });
