@@ -116,9 +116,14 @@ async function resolveSummaryFromMapping(
 export function shouldUploadAttachmentsForSync(input: {
   created: boolean;
   existingIssueKey?: string;
+  attachmentSource?: "item_assets" | "file_column";
 }): boolean {
+  if (input.attachmentSource === "file_column" && input.existingIssueKey) {
+    return true;
+  }
+
   if (input.created) {
-    return false;
+    return input.attachmentSource === "file_column";
   }
 
   return Boolean(input.existingIssueKey);
@@ -389,7 +394,8 @@ async function runSyncMondayItemToJira(input: {
   let attachmentCount = 0;
   const shouldUploadAttachments = shouldUploadAttachmentsForSync({
     created,
-    existingIssueKey: issueKey || undefined
+    existingIssueKey: issueKey || undefined,
+    attachmentSource: mapping.attachmentSource
   });
   const alreadyUploadedAssetIds = new Set(usingExistingIssueKey ? existing?.uploadedAssetIds ?? [] : []);
   const uploadedAssetIds = [...alreadyUploadedAssetIds];

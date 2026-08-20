@@ -24,8 +24,21 @@ test("extractAssetIdsFromFileColumnValue handles JSON strings produced by Monday
   assert.deepEqual(result, ["abc-123", "def-456"]);
 });
 
-test("shouldUploadAttachmentsForSync skips uploads when the Jira issue was just created", () => {
-  assert.equal(shouldUploadAttachmentsForSync({ created: true, existingIssueKey: undefined }), false);
-  assert.equal(shouldUploadAttachmentsForSync({ created: false, existingIssueKey: "ABC-123" }), true);
-  assert.equal(shouldUploadAttachmentsForSync({ created: false, existingIssueKey: undefined }), false);
+test("shouldUploadAttachmentsForSync uploads file-column attachments after issue creation but not item-asset attachments", () => {
+  assert.equal(
+    shouldUploadAttachmentsForSync({ created: true, existingIssueKey: undefined, attachmentSource: "file_column" }),
+    true
+  );
+  assert.equal(
+    shouldUploadAttachmentsForSync({ created: true, existingIssueKey: undefined, attachmentSource: "item_assets" }),
+    false
+  );
+  assert.equal(
+    shouldUploadAttachmentsForSync({ created: false, existingIssueKey: "ABC-123", attachmentSource: "file_column" }),
+    true
+  );
+  assert.equal(
+    shouldUploadAttachmentsForSync({ created: false, existingIssueKey: undefined, attachmentSource: "file_column" }),
+    false
+  );
 });
