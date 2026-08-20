@@ -8,6 +8,7 @@ import {
 } from "./syncService.js";
 import {
   buildMondayAssetUrl,
+  isHtmlAttachmentResponse,
   shouldLinkAttachmentInDescription
 } from "./jiraService.js";
 
@@ -116,4 +117,10 @@ test("buildMondayAssetUrl creates a direct Monday asset link for Jira descriptio
     buildMondayAssetUrl("https://bootepolch.monday.com", "5101729142", "3156414502", "257275188"),
     "https://bootepolch.monday.com/boards/5101729142/pulses/3156414502?asset_id=257275188"
   );
+});
+
+test("isHtmlAttachmentResponse rejects Monday login HTML as a file payload", () => {
+  const html = Buffer.from("<!DOCTYPE html><html><head><title>monday.com: Where Teams Get Work Done</title></head><body>login</body></html>");
+  assert.equal(isHtmlAttachmentResponse({ data: html, contentType: "text/html; charset=utf-8" }), true);
+  assert.equal(isHtmlAttachmentResponse({ data: Buffer.from([0x89, 0x50, 0x4e, 0x47]), contentType: "image/png" }), false);
 });

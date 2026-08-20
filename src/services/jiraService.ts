@@ -89,6 +89,28 @@ export function shouldLinkAttachmentInDescription(fileSizeBytes: number): boolea
   return Number.isFinite(fileSizeBytes) && fileSizeBytes > MAX_JIRA_ATTACHMENT_SIZE_BYTES;
 }
 
+export function isHtmlAttachmentResponse(input: {
+  data: ArrayBuffer | Buffer;
+  contentType?: string | null;
+  fileName?: string;
+}): boolean {
+  const ct = (input.contentType ?? "").toLowerCase();
+  if (ct.includes("text/html") || ct.includes("application/xhtml+xml") || ct.includes("text/plain")) {
+    return true;
+  }
+
+  const view = Buffer.isBuffer(input.data) ? input.data : Buffer.from(input.data);
+  const trimmed = view.subarray(0, 256).toString("latin1").trim().toLowerCase();
+
+  return (
+    trimmed.startsWith("<!doctype html") ||
+    trimmed.startsWith("<html") ||
+    trimmed.includes("<title>monday.com") ||
+    trimmed.includes("window.pulse =") ||
+    trimmed.includes("login-monday-body")
+  );
+}
+
 export function buildMondayAssetUrl(
   mondayBaseUrl: string,
   boardId: string,
@@ -525,7 +547,12 @@ export async function uploadJiraAttachmentFromUrl(input: {
   });
 
   const fileBytes: Buffer = Buffer.from(fileResponse.data as ArrayBuffer);
+  const contentType = String(fileResponse.headers?.["content-type"] ?? "");
   const finalFileName = safeFileName;
+
+  if (isHtmlAttachmentResponse({ data: fileBytes, contentType, fileName: finalFileName })) {
+    throw new Error("Downloaded content is HTML instead of a file binary; refusing to upload.");
+  }
 
   if (fileBytes.length > MAX_JIRA_ATTACHMENT_SIZE_BYTES) {
     throw new Error(`Attachment exceeds ${MAX_JIRA_ATTACHMENT_SIZE_BYTES / (1024 * 1024)}MB and must be linked in Jira description.`);
