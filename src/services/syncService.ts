@@ -278,13 +278,13 @@ export function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown
                 : parentName;
 
     const directUrlCandidates = [
-      record.publicUrl,
-      record.public_url,
-      record.fileUrl,
-      record.file_url,
       record.url,
       record.downloadUrl,
       record.download_url,
+      record.fileUrl,
+      record.file_url,
+      record.publicUrl,
+      record.public_url,
       record.href,
       record.link,
       record.source,
