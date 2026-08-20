@@ -509,7 +509,7 @@ export async function uploadJiraAttachmentFromUrl(input: {
     validateStatus: (status) => status >= 200 && status < 300
   });
 
-  let fileBytes = Buffer.from(fileResponse.data as ArrayBuffer);
+  let fileBytes: Buffer = Buffer.from(fileResponse.data as ArrayBuffer);
   let finalFileName = safeFileName;
 
   if (isMovFileName(safeFileName)) {
