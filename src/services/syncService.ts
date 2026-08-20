@@ -113,6 +113,17 @@ async function resolveSummaryFromMapping(
   });
 }
 
+export function shouldUploadAttachmentsForSync(input: {
+  created: boolean;
+  existingIssueKey?: string;
+}): boolean {
+  if (input.created) {
+    return false;
+  }
+
+  return Boolean(input.existingIssueKey);
+}
+
 export function extractAssetIdsFromFileColumnValue(rawValue: unknown): string[] {
   if (rawValue === undefined || rawValue === null || rawValue === "") {
     return [];
@@ -376,25 +387,42 @@ async function runSyncMondayItemToJira(input: {
   }
 
   let attachmentCount = 0;
+  const shouldUploadAttachments = shouldUploadAttachmentsForSync({
+    created,
+    existingIssueKey: issueKey || undefined
+  });
   const alreadyUploadedAssetIds = new Set(usingExistingIssueKey ? existing?.uploadedAssetIds ?? [] : []);
   const uploadedAssetIds = [...alreadyUploadedAssetIds];
 
-  for (const asset of assetsToSync) {
-    if (!asset.publicUrl || alreadyUploadedAssetIds.has(asset.id)) {
-      continue;
+  if (shouldUploadAttachments) {
+    for (const asset of assetsToSync) {
+      if (!asset.publicUrl || alreadyUploadedAssetIds.has(asset.id)) {
+        continue;
+      }
+
+      const fileName = asset.name?.trim() || `asset-${asset.id}.${asset.fileExtension || "bin"}`;
+
+      try {
+        await uploadJiraAttachmentFromUrl({
+          account: jiraAccount,
+          issueIdOrKey: issueKey,
+          fileUrl: asset.publicUrl,
+          fileName
+        });
+
+        uploadedAssetIds.push(asset.id);
+        attachmentCount += 1;
+      } catch (error) {
+        console.warn("Skipping Monday asset upload for Jira", {
+          boardId,
+          itemId,
+          assetId: asset.id,
+          fileName,
+          fileUrl: asset.publicUrl,
+          reason: error instanceof Error ? error.message : String(error)
+        });
+      }
     }
-
-    const fileName = asset.name?.trim() || `asset-${asset.id}.${asset.fileExtension || "bin"}`;
-
-    await uploadJiraAttachmentFromUrl({
-      account: jiraAccount,
-      issueIdOrKey: issueKey,
-      fileUrl: asset.publicUrl,
-      fileName
-    });
-
-    uploadedAssetIds.push(asset.id);
-    attachmentCount += 1;
   }
 
   let statusSync;

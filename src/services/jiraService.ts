@@ -394,6 +394,32 @@ export async function listJiraPriorities(account: JiraAccountConfig): Promise<Ji
   }));
 }
 
+export function normalizeAttachmentDownloadUrl(fileUrl: string): string | null {
+  if (!fileUrl || typeof fileUrl !== "string") {
+    return null;
+  }
+
+  try {
+    const url = new URL(fileUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizeAttachmentFileName(fileName: string): string {
+  const baseName = (fileName || "attachment.bin")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return baseName.length > 0 ? baseName : "attachment.bin";
+}
+
 export async function uploadJiraAttachmentFromUrl(input: {
   account: JiraAccountConfig;
   issueIdOrKey: string;
@@ -401,31 +427,38 @@ export async function uploadJiraAttachmentFromUrl(input: {
   fileName: string;
 }): Promise<void> {
   const { account, issueIdOrKey, fileUrl, fileName } = input;
+  const safeUrl = normalizeAttachmentDownloadUrl(fileUrl);
 
-  const fileResponse = await fetch(fileUrl);
-  if (!fileResponse.ok) {
-    throw new Error(`Could not download file from Monday (${fileResponse.status}).`);
+  if (!safeUrl) {
+    throw new Error("Attachment URL is missing or not a valid http(s) URL.");
   }
 
-  const fileBytes = await fileResponse.arrayBuffer();
-  const form = new FormData();
-  form.append("file", new Blob([fileBytes]), fileName);
-
+  const safeFileName = sanitizeAttachmentFileName(fileName);
   const uploadUrl = new URL(`/rest/api/3/issue/${issueIdOrKey}/attachments`, account.baseUrl);
-  const uploadResponse = await fetch(uploadUrl.toString(), {
-    method: "POST",
+
+  const fileResponse = await axios.get(safeUrl, {
+    responseType: "arraybuffer",
+    timeout: 30000,
+    maxContentLength: 25 * 1024 * 1024,
+    maxBodyLength: 25 * 1024 * 1024,
+    validateStatus: (status) => status >= 200 && status < 300
+  });
+
+  const fileBytes = Buffer.from(fileResponse.data as ArrayBuffer);
+  const formData = new FormData();
+  formData.append("file", new Blob([fileBytes]), safeFileName);
+
+  await axios.post(uploadUrl.toString(), formData, {
     headers: {
       Authorization: buildAuthHeader(account),
       Accept: "application/json",
       "X-Atlassian-Token": "no-check"
     },
-    body: form
+    timeout: 60000,
+    maxContentLength: 25 * 1024 * 1024,
+    maxBodyLength: 25 * 1024 * 1024,
+    validateStatus: (status) => status >= 200 && status < 300
   });
-
-  if (!uploadResponse.ok) {
-    const responseText = await uploadResponse.text();
-    throw new Error(`Jira attachment upload failed (${uploadResponse.status}): ${responseText}`);
-  }
 }
 
 async function transitionIssue(account: JiraAccountConfig, issueIdOrKey: string, transitionId: string): Promise<void> {

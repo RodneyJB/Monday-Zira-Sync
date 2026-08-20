@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { extractAssetIdsFromFileColumnValue } from "./syncService.js";
+import { extractAssetIdsFromFileColumnValue, shouldUploadAttachmentsForSync } from "./syncService.js";
 
 test("extractAssetIdsFromFileColumnValue handles object payloads from Monday file columns", () => {
   const result = extractAssetIdsFromFileColumnValue({
@@ -22,4 +22,10 @@ test("extractAssetIdsFromFileColumnValue handles JSON strings produced by Monday
   }));
 
   assert.deepEqual(result, ["abc-123", "def-456"]);
+});
+
+test("shouldUploadAttachmentsForSync skips uploads when the Jira issue was just created", () => {
+  assert.equal(shouldUploadAttachmentsForSync({ created: true, existingIssueKey: undefined }), false);
+  assert.equal(shouldUploadAttachmentsForSync({ created: false, existingIssueKey: "ABC-123" }), true);
+  assert.equal(shouldUploadAttachmentsForSync({ created: false, existingIssueKey: undefined }), false);
 });
