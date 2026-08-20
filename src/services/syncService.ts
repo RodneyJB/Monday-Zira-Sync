@@ -62,6 +62,26 @@ function makeSyncKey(boardId: string, itemId: string): string {
   return `${boardId}:${itemId}`;
 }
 
+function parseMondayAssetIdFromUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    const assetId = url.searchParams.get("asset_id")?.trim();
+    return assetId || null;
+  } catch {
+    return null;
+  }
+}
+
+function isMondayAssetPointerUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const assetId = url.searchParams.get("asset_id");
+    return Boolean(assetId && /\/boards\/\d+\/pulses\/\d+/i.test(url.pathname));
+  } catch {
+    return false;
+  }
+}
+
 function buildMondayItemUrl(boardId: string, itemId: string): string {
   const baseUrl = config.MONDAY_ACCOUNT_BASE_URL.replace(/\/$/, "");
   const mapping = `boards/${boardId}/pulses/${itemId}`;
@@ -148,6 +168,11 @@ export function extractAssetIdsFromFileColumnValue(rawValue: unknown): string[] 
         return;
       }
 
+      const urlAssetId = parseMondayAssetIdFromUrl(trimmed);
+      if (urlAssetId) {
+        seen.add(urlAssetId);
+      }
+
       try {
         const parsed = JSON.parse(trimmed) as unknown;
         collectIds(parsed);
@@ -216,6 +241,11 @@ export function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown
   const addCandidate = (publicUrl: string, name?: string, idOverride?: string): void => {
     const trimmed = publicUrl.trim();
     if (!/^https?:\/\//i.test(trimmed)) {
+      return;
+    }
+
+    // Monday pulse URLs with asset_id often resolve to login HTML, not the binary file.
+    if (isMondayAssetPointerUrl(trimmed)) {
       return;
     }
 

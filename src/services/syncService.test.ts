@@ -28,6 +28,18 @@ test("extractAssetIdsFromFileColumnValue handles JSON strings produced by Monday
   assert.deepEqual(result, ["abc-123", "def-456"]);
 });
 
+test("extractAssetIdsFromFileColumnValue reads monday asset_id from pointer URLs", () => {
+  const result = extractAssetIdsFromFileColumnValue({
+    files: [
+      {
+        url: "https://bootepolch.monday.com/boards/5100981950/pulses/3174553848?asset_id=987654321"
+      }
+    ]
+  });
+
+  assert.deepEqual(result, ["987654321"]);
+});
+
 test("shouldUploadAttachmentsForSync uploads file-column attachments after issue creation but not item-asset attachments", () => {
   assert.equal(
     shouldUploadAttachmentsForSync({ created: true, existingIssueKey: undefined, attachmentSource: "file_column" }),
@@ -99,4 +111,18 @@ test("resolveAssetsFromMapping uses a Monday text fallback when file-column valu
     result.map((entry) => entry.publicUrl),
     ["https://cdn.example.com/uploads/clip.mp4"]
   );
+});
+
+test("extractAttachmentCandidatesFromFileColumnValue ignores monday pulse pointer URLs", () => {
+  const result = extractAttachmentCandidatesFromFileColumnValue({
+    files: [
+      {
+        id: "video-2",
+        name: "english.mp4",
+        url: "https://bootepolch.monday.com/boards/5100981950/pulses/3174553848?asset_id=987654321"
+      }
+    ]
+  });
+
+  assert.deepEqual(result, []);
 });

@@ -435,6 +435,11 @@ export function sanitizeAttachmentFileName(fileName: string): string {
   return baseName.length > 0 ? baseName : "attachment.bin";
 }
 
+function looksLikeHtmlPayload(fileBytes: Buffer): boolean {
+  const probe = fileBytes.subarray(0, Math.min(fileBytes.length, 512)).toString("utf8").trimStart().toLowerCase();
+  return probe.startsWith("<!doctype html") || probe.startsWith("<html");
+}
+
 export async function uploadJiraAttachmentFromUrl(input: {
   account: JiraAccountConfig;
   issueIdOrKey: string;
@@ -461,6 +466,11 @@ export async function uploadJiraAttachmentFromUrl(input: {
 
   const fileBytes: Buffer = Buffer.from(fileResponse.data as ArrayBuffer);
   const finalFileName = safeFileName;
+  const contentType = String(fileResponse.headers["content-type"] || "").toLowerCase();
+
+  if (contentType.includes("text/html") || looksLikeHtmlPayload(fileBytes)) {
+    throw new Error(`Attachment URL returned HTML instead of a downloadable file: ${safeUrl}`);
+  }
 
   if (shouldLinkAttachmentInDescription(fileBytes.length)) {
     throw new Error(`Attachment exceeds ${(MAX_JIRA_ATTACHMENT_SIZE_BYTES / (1024 * 1024)).toFixed(0)}MB and must be linked in Jira description.`);
