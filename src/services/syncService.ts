@@ -113,67 +113,59 @@ async function resolveSummaryFromMapping(
   });
 }
 
-export function extractAssetIdsFromFileColumnValue(rawValue: string): string[] {
-  if (!rawValue) {
+export function extractAssetIdsFromFileColumnValue(rawValue: unknown): string[] {
+  if (rawValue === undefined || rawValue === null || rawValue === "") {
     return [];
   }
 
-  try {
-    const parsed = JSON.parse(rawValue) as {
-      files?: Array<Record<string, unknown>>;
-      assets?: Array<Record<string, unknown>>;
-      value?: Array<Record<string, unknown>>;
-    };
+  const seen = new Set<string>();
 
-    const entries = [
-      ...(parsed.files ?? []),
-      ...(parsed.assets ?? []),
-      ...(parsed.value ?? [])
-    ];
+  const collectIds = (value: unknown): void => {
+    if (value === undefined || value === null) {
+      return;
+    }
 
-    return entries
-      .map((entry) => {
-        const candidate =
-          entry.assetId ??
-          entry.asset_id ??
-          entry.fileId ??
-          entry.file_id ??
-          entry.id ??
-          entry.uuid ??
-          entry.value;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return;
+      }
 
-        if (typeof candidate === "number") {
-          return String(candidate);
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        collectIds(parsed);
+        return;
+      } catch {
+        // Ignore non-JSON strings and continue with plain text fallback.
+      }
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => collectIds(entry));
+      return;
+    }
+
+    if (typeof value === "object") {
+      const record = value as Record<string, unknown>;
+
+      for (const key of ["assetId", "asset_id", "fileId", "file_id", "id", "uuid", "value"]) {
+        const candidate = record[key];
+
+        if (typeof candidate === "string" && candidate.trim()) {
+          seen.add(candidate.trim());
+        } else if (typeof candidate === "number") {
+          seen.add(String(candidate));
         }
+      }
 
-        if (typeof candidate === "string") {
-          return candidate;
-        }
+      for (const nested of Object.values(record)) {
+        collectIds(nested);
+      }
+    }
+  };
 
-        if (candidate && typeof candidate === "object") {
-          const nested =
-            (candidate as Record<string, unknown>).assetId ??
-            (candidate as Record<string, unknown>).asset_id ??
-            (candidate as Record<string, unknown>).fileId ??
-            (candidate as Record<string, unknown>).file_id ??
-            (candidate as Record<string, unknown>).id ??
-            (candidate as Record<string, unknown>).uuid;
-
-          if (typeof nested === "string") {
-            return nested;
-          }
-
-          if (typeof nested === "number") {
-            return String(nested);
-          }
-        }
-
-        return "";
-      })
-      .filter((entry) => entry.length > 0);
-  } catch {
-    return [];
-  }
+  collectIds(rawValue);
+  return [...seen];
 }
 
 function resolveAssetsFromMapping(
