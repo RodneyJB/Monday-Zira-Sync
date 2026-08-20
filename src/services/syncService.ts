@@ -184,6 +184,134 @@ export function extractAssetIdsFromFileColumnValue(rawValue: unknown): string[] 
   return [...seen];
 }
 
+function inferAttachmentExtension(fileName: string | undefined): string {
+  if (!fileName) {
+    return "bin";
+  }
+
+  const clean = fileName.split("?")[0].split("#")[0];
+  const extension = clean.includes(".") ? clean.split(".").pop() : "";
+  return extension && extension.length <= 8 ? extension : "bin";
+}
+
+function extractAttachmentCandidatesFromFileColumnValue(rawValue: unknown): Array<{
+  id: string;
+  name: string;
+  publicUrl: string;
+  fileExtension: string;
+}> {
+  if (rawValue === undefined || rawValue === null || rawValue === "") {
+    return [];
+  }
+
+  const candidates: Array<{
+    id: string;
+    name: string;
+    publicUrl: string;
+    fileExtension: string;
+  }> = [];
+  const seen = new Set<string>();
+
+  const collect = (value: unknown): void => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        collect(parsed);
+        return;
+      } catch {
+        if (/^https?:\/\//i.test(trimmed)) {
+          const key = `url:${trimmed}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            candidates.push({
+              id: key,
+              name: `attachment-${Date.now()}`,
+              publicUrl: trimmed,
+              fileExtension: "bin"
+            });
+          }
+        }
+      }
+
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => collect(entry));
+      return;
+    }
+
+    if (typeof value !== "object") {
+      return;
+    }
+
+    const record = value as Record<string, unknown>;
+    const possibleUrl = [
+      record.publicUrl,
+      record.public_url,
+      record.fileUrl,
+      record.file_url,
+      record.url,
+      record.downloadUrl,
+      record.download_url
+    ].find((entry): entry is string => typeof entry === "string" && /^https?:\/\//i.test(entry));
+
+    if (possibleUrl) {
+      const idCandidate =
+        [
+          record.assetId,
+          record.asset_id,
+          record.fileId,
+          record.file_id,
+          record.id,
+          record.uuid,
+          record.value,
+          possibleUrl
+        ].find((entry): entry is string | number => typeof entry === "string" || typeof entry === "number");
+
+      const id = typeof idCandidate === "string" ? idCandidate.trim() : String(idCandidate ?? possibleUrl);
+      const name = typeof record.name === "string" ? record.name : `attachment-${id}`;
+      const fileExtension = inferAttachmentExtension(typeof record.name === "string" ? record.name : undefined);
+      const key = `url:${possibleUrl}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        candidates.push({
+          id,
+          name,
+          publicUrl: possibleUrl,
+          fileExtension
+        });
+      }
+    }
+
+    for (const key of ["assetId", "asset_id", "fileId", "file_id", "id", "uuid", "value"]) {
+      const candidate = record[key];
+      if (typeof candidate === "string" && candidate.trim()) {
+        const normalized = candidate.trim();
+        if (!seen.has(`id:${normalized}`)) {
+          seen.add(`id:${normalized}`);
+        }
+      }
+    }
+
+    for (const nested of Object.values(record)) {
+      collect(nested);
+    }
+  };
+
+  collect(rawValue);
+  return candidates;
+}
+
 function resolveAssetsFromMapping(
   mondayItem: Awaited<ReturnType<typeof getMondayItemForSync>>,
   mapping: Awaited<ReturnType<typeof getBoardMapping>>
@@ -198,7 +326,24 @@ function resolveAssetsFromMapping(
   }
 
   const selectedAssetIds = new Set(extractAssetIdsFromFileColumnValue(fileColumn.value));
-  return mondayItem.assets.filter((asset) => selectedAssetIds.has(asset.id));
+  const matchedAssets = mondayItem.assets.filter((asset) => selectedAssetIds.has(asset.id));
+  const directCandidates = extractAttachmentCandidatesFromFileColumnValue(fileColumn.value);
+  const directUrls = new Set(directCandidates.map((candidate) => candidate.publicUrl));
+  const byDirectUrl = directCandidates.filter((candidate) => candidate.publicUrl && !matchedAssets.some((asset) => asset.publicUrl === candidate.publicUrl));
+
+  const merged = [...matchedAssets, ...byDirectUrl.map((candidate) => ({
+    id: candidate.id,
+    name: candidate.name,
+    publicUrl: candidate.publicUrl,
+    fileExtension: candidate.fileExtension
+  }))];
+
+  const unique = new Map<string, (typeof merged)[number]>();
+  for (const asset of merged) {
+    unique.set(asset.publicUrl || asset.id, asset);
+  }
+
+  return [...unique.values()].filter((asset) => Boolean(asset.publicUrl));
 }
 
 function resolvePriorityFromStatusLabel(input: {
