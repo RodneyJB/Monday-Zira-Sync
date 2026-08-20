@@ -87,3 +87,16 @@ test("extractAttachmentCandidatesFromFileColumnValue finds nested video URLs in 
     ["https://cdn.example.com/uploads/clip.mov"]
   );
 });
+
+test("resolveAssetsFromMapping uses a Monday text fallback when file-column value is stored in text", () => {
+  const raw = JSON.stringify({
+    files: [{ id: "video-1", name: "clip.mp4", url: "https://cdn.example.com/uploads/clip.mp4" }]
+  });
+
+  const result = extractAttachmentCandidatesFromFileColumnValue(raw);
+
+  assert.deepEqual(
+    result.map((entry) => entry.publicUrl),
+    ["https://cdn.example.com/uploads/clip.mp4"]
+  );
+});

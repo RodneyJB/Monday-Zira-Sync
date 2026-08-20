@@ -321,15 +321,18 @@ function resolveAssetsFromMapping(
   }
 
   const fileColumn = mondayItem.columnValues.find((column) => column.id === mapping.attachmentColumnId);
-  if (!fileColumn?.value) {
+  const fileColumnPayload = fileColumn?.value ?? fileColumn?.text ?? null;
+  if (!fileColumnPayload) {
     return [];
   }
 
-  const selectedAssetIds = new Set(extractAssetIdsFromFileColumnValue(fileColumn.value));
+  const selectedAssetIds = new Set(extractAssetIdsFromFileColumnValue(fileColumnPayload));
   const matchedAssets = mondayItem.assets.filter((asset) => selectedAssetIds.has(asset.id));
-  const directCandidates = extractAttachmentCandidatesFromFileColumnValue(fileColumn.value);
-  const directUrls = new Set(directCandidates.map((candidate) => candidate.publicUrl));
-  const byDirectUrl = directCandidates.filter((candidate) => candidate.publicUrl && !matchedAssets.some((asset) => asset.publicUrl === candidate.publicUrl));
+  const directCandidates = extractAttachmentCandidatesFromFileColumnValue(fileColumnPayload);
+  const byDirectUrl = directCandidates.filter(
+    (candidate) =>
+      candidate.publicUrl && !matchedAssets.some((asset) => asset.publicUrl === candidate.publicUrl)
+  );
 
   const merged = [...matchedAssets, ...byDirectUrl.map((candidate) => ({
     id: candidate.id,
