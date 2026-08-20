@@ -22,8 +22,20 @@ const envSchema = z.object({
 
 const parsedEnv = envSchema.safeParse(process.env);
 
+const safeEnv = parsedEnv.success ? parsedEnv.data : {
+  NODE_ENV: "development",
+  PORT: 3000,
+  DATA_DIR: "data",
+  MONDAY_API_TOKEN: undefined,
+  MONDAY_API_VERSION: "2025-04",
+  MONDAY_ACCOUNT_BASE_URL: "https://bootepolch.monday.com",
+  MONDAY_SIGNING_SECRET: undefined,
+  JIRA_ACCOUNTS_JSON: undefined,
+  ZIRA_ACCOUNTS_JSON: undefined
+} as const;
+
 if (!parsedEnv.success) {
-  throw new Error(`Invalid environment: ${parsedEnv.error.message}`);
+  console.warn("Environment validation failed; using safe defaults instead of exiting. Details:", parsedEnv.error.message);
 }
 
 function parseJiraAccounts(raw: string | undefined) {
@@ -35,21 +47,23 @@ function parseJiraAccounts(raw: string | undefined) {
   try {
     parsedJson = JSON.parse(raw);
   } catch {
-    throw new Error("JIRA_ACCOUNTS_JSON must be valid JSON.");
+    console.warn("JIRA_ACCOUNTS_JSON is not valid JSON; continuing without Jira accounts.");
+    return [] as Array<z.infer<typeof jiraAccountSchema>>;
   }
 
   const parsed = z.array(jiraAccountSchema).safeParse(parsedJson);
   if (!parsed.success) {
-    throw new Error(`JIRA_ACCOUNTS_JSON is invalid: ${parsed.error.message}`);
+    console.warn("JIRA_ACCOUNTS_JSON is invalid; continuing without Jira accounts.", parsed.error.message);
+    return [] as Array<z.infer<typeof jiraAccountSchema>>;
   }
 
   return parsed.data;
 }
 
-const rawJiraAccountsJson = parsedEnv.data.JIRA_ACCOUNTS_JSON ?? parsedEnv.data.ZIRA_ACCOUNTS_JSON;
+const rawJiraAccountsJson = safeEnv.JIRA_ACCOUNTS_JSON ?? safeEnv.ZIRA_ACCOUNTS_JSON;
 
 export const config = {
-  ...parsedEnv.data,
+  ...safeEnv,
   jiraAccounts: parseJiraAccounts(rawJiraAccountsJson)
 };
 
