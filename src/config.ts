@@ -17,7 +17,11 @@ const envSchema = z.object({
   MONDAY_ACCOUNT_BASE_URL: z.url().default("https://bootepolch.monday.com"),
   MONDAY_SIGNING_SECRET: z.string().optional(),
   JIRA_ACCOUNTS_JSON: z.string().optional(),
-  ZIRA_ACCOUNTS_JSON: z.string().optional()
+  ZIRA_ACCOUNTS_JSON: z.string().optional(),
+  JIRA_DEFAULT_ACCOUNT_ID: z.string().optional(),
+  JIRA_DEFAULT_PROJECT_KEY: z.string().optional(),
+  JIRA_DEFAULT_PROJECT_NAME: z.string().optional(),
+  JIRA_DEFAULT_BOARD_URL: z.string().optional()
 }).passthrough();
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -31,7 +35,11 @@ const safeEnv = parsedEnv.success ? parsedEnv.data : {
   MONDAY_ACCOUNT_BASE_URL: "https://bootepolch.monday.com",
   MONDAY_SIGNING_SECRET: undefined,
   JIRA_ACCOUNTS_JSON: undefined,
-  ZIRA_ACCOUNTS_JSON: undefined
+  ZIRA_ACCOUNTS_JSON: undefined,
+  JIRA_DEFAULT_ACCOUNT_ID: undefined,
+  JIRA_DEFAULT_PROJECT_KEY: undefined,
+  JIRA_DEFAULT_PROJECT_NAME: undefined,
+  JIRA_DEFAULT_BOARD_URL: undefined
 } as const;
 
 if (!parsedEnv.success) {

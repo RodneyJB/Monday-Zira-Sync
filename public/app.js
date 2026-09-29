@@ -205,6 +205,29 @@ async function loadAccounts() {
   accountSelect.disabled = false;
 }
 
+async function applyFixedJiraTarget() {
+  try {
+    const data = await fetchJson("/api/jira/default-target");
+    const fixedTarget = data.target;
+    if (!fixedTarget) {
+      return;
+    }
+
+    if (!accounts.some((account) => account.id === fixedTarget.accountId)) {
+      return;
+    }
+
+    accountSelect.value = fixedTarget.accountId;
+    accountSelect.disabled = true;
+    await loadProjects(fixedTarget.accountId);
+    projectSelect.value = fixedTarget.projectKey;
+    projectSelect.disabled = true;
+    setStatus(`Fixed Jira target: ${fixedTarget.projectName} (${fixedTarget.projectKey})`, "ok");
+  } catch {
+    // Ignore fixed-target lookup failures and keep manual selection available.
+  }
+}
+
 async function loadProjects(accountId) {
   projectSelect.disabled = true;
   projectSelect.innerHTML = '<option value="">Loading projects...</option>';

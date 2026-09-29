@@ -23,6 +23,20 @@ test("buildMondayIssueLookupJql includes both labels and Monday item URL fallbac
   assert.match(jql, /description\s*~\s*".*boards\/5100981950\/pulses\/123456789"/i);
 });
 
+test("buildMondayIssueLookupJql can scope item lookups to a board parent issue", () => {
+  const jql = buildMondayIssueLookupJql({
+    projectKey: "DF",
+    boardId: "1070",
+    itemId: "456",
+    parentIssueKey: "DF-42",
+    labels: ["monday-board-1070", "monday-item-456"]
+  });
+
+  assert.match(jql, /project\s*=\s*"DF"/i);
+  assert.match(jql, /parent\s*=\s*"DF-42"/i);
+  assert.match(jql, /labels\s*=\s*"monday-item-456"/i);
+});
+
 test("normalizeLanguage accepts common display names like Spain and Spanish", () => {
   assert.equal(normalizeLanguage("Spain"), "es");
   assert.equal(normalizeLanguage("Spanish"), "es");

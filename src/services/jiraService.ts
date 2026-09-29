@@ -255,6 +255,7 @@ export function buildMondayIssueLookupJql(input: {
   labels: string[];
   boardId?: string;
   itemId?: string;
+  parentIssueKey?: string;
 }): string {
   const escapedProject = input.projectKey.replace(/"/g, '\\"');
   const clauses = [`project = "${escapedProject}"`];
@@ -262,6 +263,11 @@ export function buildMondayIssueLookupJql(input: {
   const labels = input.labels.filter((label) => label.trim().length > 0);
   for (const label of labels) {
     clauses.push(`labels = "${label.replace(/"/g, '\\\"')}"`);
+  }
+
+  if (input.parentIssueKey) {
+    const escapedParent = input.parentIssueKey.replace(/"/g, '\\"');
+    clauses.push(`parent = "${escapedParent}"`);
   }
 
   if (input.boardId && input.itemId) {
@@ -278,10 +284,11 @@ export async function findJiraIssueByLabels(input: {
   labels: string[];
   boardId?: string;
   itemId?: string;
+  parentIssueKey?: string;
 }): Promise<JiraIssueMatch | null> {
-  const { account, projectKey, boardId, itemId } = input;
+  const { account, projectKey, boardId, itemId, parentIssueKey } = input;
   const labels = input.labels.filter((label) => label.trim().length > 0);
-  if (labels.length === 0 && !(boardId && itemId)) {
+  if (labels.length === 0 && !(boardId && itemId) && !parentIssueKey) {
     return null;
   }
 
@@ -289,7 +296,8 @@ export async function findJiraIssueByLabels(input: {
     projectKey,
     labels,
     boardId,
-    itemId
+    itemId,
+    parentIssueKey
   });
 
   const url = new URL("/rest/api/3/search/jql", account.baseUrl);
@@ -330,18 +338,39 @@ export async function createJiraIssue(input: {
   mondayItemUrl?: string;
   attachmentFallbackLink?: { text: string; href: string };
   labels?: string[];
+  parentIssueKey?: string;
+  issueTypeName?: string;
 }): Promise<JiraCreatedIssue> {
-  const { account, projectKey, summary, description, priorityName, mondayItemUrl, attachmentFallbackLink, labels } = input;
+  const {
+    account,
+    projectKey,
+    summary,
+    description,
+    priorityName,
+    mondayItemUrl,
+    attachmentFallbackLink,
+    labels,
+    parentIssueKey,
+    issueTypeName
+  } = input;
 
   const url = new URL("/rest/api/3/issue", account.baseUrl);
+  const resolvedIssueTypeName = issueTypeName ?? (parentIssueKey ? "Sub-task" : "Task");
   const buildPayload = (includePriority: boolean) => ({
     fields: {
       project: {
         key: projectKey
       },
       issuetype: {
-        name: "Task"
+        name: resolvedIssueTypeName
       },
+      ...(parentIssueKey
+        ? {
+            parent: {
+              key: parentIssueKey
+            }
+          }
+        : {}),
       summary,
       ...(includePriority && priorityName
         ? {

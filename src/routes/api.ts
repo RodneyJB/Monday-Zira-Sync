@@ -304,6 +304,19 @@ apiRouter.get("/jira/accounts", (_req, res) => {
   res.json({ accounts });
 });
 
+apiRouter.get("/jira/default-target", (_req, res) => {
+  const target = config.JIRA_DEFAULT_ACCOUNT_ID && config.JIRA_DEFAULT_PROJECT_KEY
+    ? {
+        accountId: config.JIRA_DEFAULT_ACCOUNT_ID,
+        projectKey: config.JIRA_DEFAULT_PROJECT_KEY,
+        projectName: config.JIRA_DEFAULT_PROJECT_NAME || config.JIRA_DEFAULT_PROJECT_KEY,
+        boardUrl: config.JIRA_DEFAULT_BOARD_URL || undefined
+      }
+    : null;
+
+  res.json({ target });
+});
+
 apiRouter.get("/jira/projects", async (req, res) => {
   const accountId = req.query.accountId;
 
@@ -360,24 +373,30 @@ apiRouter.post("/mapping", async (req, res) => {
     return;
   }
 
-  const account = config.jiraAccounts.find((item) => item.id === parsed.data.accountId);
+  const payload = {
+    ...parsed.data,
+    ...(config.JIRA_DEFAULT_ACCOUNT_ID ? { accountId: config.JIRA_DEFAULT_ACCOUNT_ID } : {}),
+    ...(config.JIRA_DEFAULT_PROJECT_KEY ? { projectKey: config.JIRA_DEFAULT_PROJECT_KEY } : {})
+  };
+
+  const account = config.jiraAccounts.find((item) => item.id === payload.accountId);
   if (!account) {
     res.status(404).json({ error: "Jira account not found" });
     return;
   }
 
-  const existing = await getBoardMapping(parsed.data.boardId);
+  const existing = await getBoardMapping(payload.boardId);
   let resetSyncedItems = false;
   let resetReason = "";
   let resetCount = 0;
 
   if (existing) {
     const targetChanged =
-      existing.accountId !== parsed.data.accountId || existing.projectKey !== parsed.data.projectKey;
+      existing.accountId !== payload.accountId || existing.projectKey !== payload.projectKey;
     const viewChanged =
       Boolean(existing.boardViewId) &&
-      Boolean(parsed.data.boardViewId) &&
-      existing.boardViewId !== parsed.data.boardViewId;
+      Boolean(payload.boardViewId) &&
+      existing.boardViewId !== payload.boardViewId;
 
     if (targetChanged || viewChanged) {
       resetSyncedItems = true;
@@ -386,7 +405,7 @@ apiRouter.post("/mapping", async (req, res) => {
     }
   }
 
-  const mapping = await saveBoardMapping(parsed.data);
+  const mapping = await saveBoardMapping(payload);
   res.status(201).json({ mapping, resetSyncedItems, resetReason, resetCount });
 });
 

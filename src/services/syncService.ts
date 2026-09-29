@@ -83,6 +83,11 @@ function isMondayAssetPointerUrl(value: string): boolean {
   }
 }
 
+function buildMondayBoardUrl(boardId: string): string {
+  const baseUrl = config.MONDAY_ACCOUNT_BASE_URL.replace(/\/$/, "");
+  return `${baseUrl}/boards/${boardId}`;
+}
+
 function buildMondayItemUrl(boardId: string, itemId: string): string {
   const baseUrl = config.MONDAY_ACCOUNT_BASE_URL.replace(/\/$/, "");
   const mapping = `boards/${boardId}/pulses/${itemId}`;
@@ -428,6 +433,43 @@ function resolvePriorityFromStatusLabel(input: {
   return pickFirstAvailable(["medium", "high", "low", "highest", "lowest"]);
 }
 
+async function ensureBoardParentIssue(input: {
+  account: typeof config.jiraAccounts[number];
+  boardId: string;
+  boardName: string;
+  projectKey: string;
+}): Promise<string> {
+  const boardLabels = [`monday-board-${slugLabelSegment(input.boardId)}`];
+
+  try {
+    const existingParent = await findJiraIssueByLabels({
+      account: input.account,
+      projectKey: input.projectKey,
+      labels: boardLabels,
+      boardId: input.boardId
+    });
+
+    if (existingParent) {
+      return existingParent.key;
+    }
+  } catch (error) {
+    if (!isJiraLookupUnavailableError(error)) {
+      throw error;
+    }
+  }
+
+  const createdParent = await createJiraIssue({
+    account: input.account,
+    projectKey: input.projectKey,
+    summary: `${input.boardName} — Monday Board`,
+    description: `This Jira item is the parent for all synced Monday items in board ${input.boardName} (ID: ${input.boardId}).`,
+    mondayItemUrl: buildMondayBoardUrl(input.boardId),
+    labels: boardLabels
+  });
+
+  return createdParent.key;
+}
+
 async function runSyncMondayItemToJira(input: {
   boardId: string;
   itemId: string;
@@ -464,6 +506,12 @@ async function runSyncMondayItemToJira(input: {
   const summary = await resolveSummaryFromMapping(mondayItem, mapping);
   const assetsToSync = resolveAssetsFromMapping(mondayItem, mapping);
   const mondayItemUrl = buildMondayItemUrl(mondayItem.boardId, mondayItem.id);
+  const boardParentIssueKey = await ensureBoardParentIssue({
+    account: jiraAccount,
+    boardId: mondayItem.boardId,
+    boardName: mondayItem.boardName,
+    projectKey: mapping.projectKey
+  });
   const liveStatusLabel = mapping.statusColumnId
     ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""
     : "";
@@ -491,7 +539,8 @@ async function runSyncMondayItemToJira(input: {
         projectKey: mapping.projectKey,
         labels: mondayIdentityLabels,
         boardId,
-        itemId
+        itemId,
+        parentIssueKey: boardParentIssueKey
       });
 
       if (matchedIssue) {
@@ -526,7 +575,8 @@ async function runSyncMondayItemToJira(input: {
           description: `Created from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
           priorityName,
           mondayItemUrl,
-          labels: mondayIdentityLabels
+          labels: mondayIdentityLabels,
+          parentIssueKey: boardParentIssueKey
         });
       } catch (error) {
         throw new Error(`Jira issue creation failed: ${errorMessage(error)}`);
@@ -559,7 +609,8 @@ async function runSyncMondayItemToJira(input: {
           description: `Recreated from Monday board ${mondayItem.boardName} (ID: ${mondayItem.boardId}), item ID: ${mondayItem.id}. Current status: ${statusLabel || "n/a"}.`,
           priorityName,
           mondayItemUrl,
-          labels: mondayIdentityLabels
+          labels: mondayIdentityLabels,
+          parentIssueKey: boardParentIssueKey
         });
       } catch (createError) {
         throw new Error(`Jira issue recreate failed: ${errorMessage(createError)}`);
