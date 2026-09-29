@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { config } from "../config.js";
 import { getBoardMapping, saveBoardMapping } from "../services/mappingStore.js";
-import { listJiraProjects } from "../services/jiraService.js";
+import { listJiraIssues, listJiraProjects } from "../services/jiraService.js";
 import {
   getMondayBoardSyncColumns,
   getMondayBoardStatusColumns,
@@ -15,7 +15,7 @@ import {
   getSyncedItem,
   listSyncedItemsForBoard
 } from "../services/syncStateStore.js";
-import { syncMondayItemToJira } from "../services/syncService.js";
+import { formatJiraError, syncMondayItemToJira } from "../services/syncService.js";
 
 const optionalTextField = z.preprocess(
   (value) => {
@@ -58,6 +58,8 @@ const saveMappingSchema = z.object({
   accountId: z.string().min(1),
   projectKey: z.string().min(1),
   projectName: z.string().min(1),
+  parentIssueMode: z.enum(["auto_create", "existing"]).default("auto_create"),
+  parentIssueKey: optionalTextField,
   syncTrigger: z.enum(["manual", "status_change"]).default("manual"),
   statusColumnId: optionalTextField,
   triggerStatusLabel: optionalTextField,
@@ -341,6 +343,36 @@ apiRouter.get("/jira/projects", async (req, res) => {
   }
 });
 
+apiRouter.get("/jira/issues", async (req, res) => {
+  const accountId = req.query.accountId;
+  const projectKey = req.query.projectKey;
+
+  if (typeof accountId !== "string" || accountId.length === 0) {
+    res.status(400).json({ error: "accountId query parameter is required" });
+    return;
+  }
+
+  if (typeof projectKey !== "string" || projectKey.length === 0) {
+    res.status(400).json({ error: "projectKey query parameter is required" });
+    return;
+  }
+
+  const account = config.jiraAccounts.find((item) => item.id === accountId);
+
+  if (!account) {
+    res.status(404).json({ error: "Jira account not found" });
+    return;
+  }
+
+  try {
+    const issues = await listJiraIssues(account, projectKey, 50);
+    res.json({ issues });
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    res.status(502).json({ error: "Could not fetch Jira issues in project", details });
+  }
+});
+
 apiRouter.get("/mapping", async (req, res) => {
   const boardId = req.query.boardId;
 
@@ -392,7 +424,10 @@ apiRouter.post("/mapping", async (req, res) => {
 
   if (existing) {
     const targetChanged =
-      existing.accountId !== payload.accountId || existing.projectKey !== payload.projectKey;
+      existing.accountId !== payload.accountId ||
+      existing.projectKey !== payload.projectKey ||
+      existing.parentIssueMode !== payload.parentIssueMode ||
+      existing.parentIssueKey !== payload.parentIssueKey;
     const viewChanged =
       Boolean(existing.boardViewId) &&
       Boolean(payload.boardViewId) &&
@@ -400,7 +435,10 @@ apiRouter.post("/mapping", async (req, res) => {
 
     if (targetChanged || viewChanged) {
       resetSyncedItems = true;
-      resetReason = targetChanged ? "Jira target changed (account/project)" : "Board view changed";
+      resetReason =
+        targetChanged
+          ? "Jira target or parent item changed (account/project/parent issue)"
+          : "Board view changed";
       resetCount = await clearSyncedItemsForBoard(parsed.data.boardId);
     }
   }
@@ -420,7 +458,7 @@ apiRouter.post("/sync/item", async (req, res) => {
     const result = await syncMondayItemToJira({ ...parsed.data, keepSynced: true });
     res.status(200).json({ result });
   } catch (error) {
-    const details = error instanceof Error ? error.message : "Unknown error";
+    const details = formatJiraError(error);
     res.status(502).json({ error: "Could not sync Monday item to Jira", details });
   }
 });
@@ -548,7 +586,7 @@ apiRouter.all("/monday/webhook", async (req, res) => {
         )}, status=${result.statusSync.action}: ${result.statusSync.details})`
       });
     } catch (error) {
-      const details = error instanceof Error ? error.message : "Unknown error";
+      const details = formatJiraError(error);
       addWebhookDebugEvent({
         at: new Date().toISOString(),
         boardId,

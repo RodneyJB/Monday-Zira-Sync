@@ -53,8 +53,85 @@ function isJiraLookupUnavailableError(error: unknown): boolean {
   );
 }
 
+function extractJiraErrorDetails(error: unknown): string {
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+
+  const response = (error as { response?: { data?: unknown; status?: number } }).response;
+  const payload = response?.data;
+
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+
+  if (payload && typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+    const directMessage =
+      typeof obj.message === "string"
+        ? obj.message
+        : typeof obj.error === "string"
+          ? obj.error
+          : "";
+
+    if (directMessage) {
+      return directMessage;
+    }
+
+    const errorMessages = obj.errorMessages;
+    if (Array.isArray(errorMessages)) {
+      const joined = errorMessages.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+      if (joined.length > 0) {
+        return joined.join("; ");
+      }
+    }
+
+    const errors = obj.errors;
+    if (errors && typeof errors === "object") {
+      const nested = Object.entries(errors as Record<string, unknown>)
+        .map(([key, value]) => {
+          if (typeof value === "string") {
+            return `${key}: ${value}`;
+          }
+          if (Array.isArray(value)) {
+            return `${key}: ${value.filter((entry): entry is string => typeof entry === "string").join(", ")}`;
+          }
+          return `${key}: ${String(value)}`;
+        })
+        .filter((entry) => entry && entry !== "undefined: undefined");
+
+      if (nested.length > 0) {
+        return nested.join("; ");
+      }
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+export function formatJiraError(error: unknown): string {
+  const details = extractJiraErrorDetails(error);
+  if (!details) {
+    return "Request failed";
+  }
+
+  return details;
+}
+
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const formatted = formatJiraError(error);
+  const response = (error as { response?: { status?: number } } | undefined)?.response;
+  const status = response?.status;
+
+  if (status) {
+    return `Request failed with status code ${status}: ${formatted}`;
+  }
+
+  return formatted;
 }
 
 const inFlightSyncs = new Map<string, Promise<SyncResult>>();
@@ -438,7 +515,12 @@ async function ensureBoardParentIssue(input: {
   boardId: string;
   boardName: string;
   projectKey: string;
+  parentIssueKey?: string;
 }): Promise<string> {
+  if (input.parentIssueKey && input.parentIssueKey.trim()) {
+    return input.parentIssueKey.trim();
+  }
+
   const boardLabels = [`monday-board-${slugLabelSegment(input.boardId)}`];
 
   try {
@@ -510,7 +592,8 @@ async function runSyncMondayItemToJira(input: {
     account: jiraAccount,
     boardId: mondayItem.boardId,
     boardName: mondayItem.boardName,
-    projectKey: mapping.projectKey
+    projectKey: mapping.projectKey,
+    parentIssueKey: mapping.parentIssueKey
   });
   const liveStatusLabel = mapping.statusColumnId
     ? mondayItem.columnValues.find((column) => column.id === mapping.statusColumnId)?.text || ""

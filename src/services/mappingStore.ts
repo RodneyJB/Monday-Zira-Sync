@@ -9,6 +9,8 @@ export type BoardMapping = {
   accountId: string;
   projectKey: string;
   projectName: string;
+  parentIssueMode: "auto_create" | "existing";
+  parentIssueKey?: string;
   syncTrigger: "manual" | "status_change";
   statusColumnId?: string;
   triggerStatusLabel?: string;
@@ -42,10 +44,14 @@ function normalizeMapping(
     attachmentSource?: "item_assets" | "file_column";
     nameTranslations?: Record<string, string>;
     targetLanguage?: string;
+    parentIssueMode?: "auto_create" | "existing";
+    parentIssueKey?: string;
   }
 ): BoardMapping {
   return {
     ...record,
+    parentIssueMode: record.parentIssueMode ?? "auto_create",
+    parentIssueKey: record.parentIssueKey || undefined,
     syncTrigger: record.syncTrigger ?? "manual",
     keepSynced: record.keepSynced ?? true,
     nameSource: record.nameSource ?? "item_name",
@@ -78,6 +84,8 @@ async function loadStore(): Promise<void> {
         attachmentSource?: "item_assets" | "file_column";
         nameTranslations?: Record<string, string>;
         targetLanguage?: string;
+        parentIssueMode?: "auto_create" | "existing";
+        parentIssueKey?: string;
       }
     >;
     cache = new Map(parsed.map((entry) => [entry.boardId, normalizeMapping(entry)]));
@@ -116,11 +124,15 @@ export async function saveBoardMapping(input: {
   attachmentColumnId?: string;
   nameTranslations?: Record<string, string>;
   targetLanguage?: string;
+  parentIssueMode?: "auto_create" | "existing";
+  parentIssueKey?: string;
 }): Promise<BoardMapping> {
   await loadStore();
 
   const mapping: BoardMapping = {
     ...input,
+    parentIssueMode: input.parentIssueMode ?? "auto_create",
+    parentIssueKey: input.parentIssueKey || undefined,
     syncTrigger: input.syncTrigger ?? "manual",
     keepSynced: input.keepSynced ?? true,
     nameSource: input.nameSource ?? "item_name",

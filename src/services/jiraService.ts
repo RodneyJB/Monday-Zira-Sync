@@ -57,23 +57,25 @@ type JiraPriorityResponse = Array<{
 }>;
 
 type JiraTransitionResponse = {
-  transitions: Array<{
-    id: string;
-    name: string;
-    to: {
-      id: string;
-      name: string;
-      statusCategory: {
-        key: string;
-        name: string;
-      };
-    };
-  }>;
+  transitions: JiraTransition[];
 };
 
 type JiraIssueLabelsResponse = {
   fields: {
     labels?: string[];
+  };
+};
+
+type JiraTransition = {
+  id: string;
+  name: string;
+  to: {
+    id: string;
+    name: string;
+    statusCategory: {
+      key: string;
+      name: string;
+    };
   };
 };
 
@@ -248,6 +250,38 @@ export async function listJiraProjects(account: JiraAccountConfig): Promise<Jira
     key: project.key,
     name: project.name
   }));
+}
+
+export async function listJiraIssues(
+  account: JiraAccountConfig,
+  projectKey: string,
+  maxResults = 50
+): Promise<Array<{ key: string; summary: string }>> {
+  const url = new URL("/rest/api/3/search/jql", account.baseUrl);
+  const jql = `project = "${projectKey.replace(/"/g, '\\"')}" ORDER BY updated DESC`;
+
+  const response = await axios.post<{ issues?: Array<{ key?: string; fields?: { summary?: string } }> }>(
+    url.toString(),
+    {
+      jql,
+      maxResults,
+      fields: ["summary"]
+    },
+    {
+      headers: {
+        ...jiraHeaders(account),
+        "Content-Type": "application/json"
+      },
+      timeout: 15000
+    }
+  );
+
+  return (response.data.issues ?? [])
+    .filter((issue) => issue.key)
+    .map((issue) => ({
+      key: issue.key as string,
+      summary: issue.fields?.summary || "Untitled issue"
+    }));
 }
 
 export function buildMondayIssueLookupJql(input: {
@@ -642,33 +676,64 @@ export async function applyJiraStatusFromMonday(input: {
     return { action: "skipped", details: "No status label available" };
   }
 
-  const transitionsUrl = new URL(`/rest/api/3/issue/${input.issueIdOrKey}/transitions`, input.account.baseUrl);
-  const transitionsResponse = await axios.get<JiraTransitionResponse>(transitionsUrl.toString(), {
-    headers: jiraHeaders(input.account),
-    timeout: 15000
-  });
-
-  const transitions = transitionsResponse.data.transitions ?? [];
-  const normalizedTarget = normalizeStatus(statusLabel);
-  const normalizedTargetComparable = normalizeComparable(statusLabel);
   const fallbackLabel = formatFallbackStatusLabel(statusLabel);
 
-  // Keep a single visible label that mirrors the latest Monday status.
-  await replaceMondayStatusLabel(
-    input.account,
-    input.issueIdOrKey,
-    fallbackLabel,
-    input.previousStatusLabel
-  );
+  try {
+    await replaceMondayStatusLabel(
+      input.account,
+      input.issueIdOrKey,
+      fallbackLabel,
+      input.previousStatusLabel
+    );
+  } catch (error) {
+    console.warn("Could not mirror Monday status as Jira label; proceeding with best-effort sync.", {
+      issueIdOrKey: input.issueIdOrKey,
+      statusLabel,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+
+  let transitions: JiraTransition[] = [];
+  try {
+    const transitionsUrl = new URL(`/rest/api/3/issue/${input.issueIdOrKey}/transitions`, input.account.baseUrl);
+    const transitionsResponse = await axios.get<JiraTransitionResponse>(transitionsUrl.toString(), {
+      headers: jiraHeaders(input.account),
+      timeout: 15000
+    });
+    transitions = transitionsResponse.data.transitions ?? [];
+  } catch (error) {
+    return {
+      action: "labeled",
+      details: `Could not read Jira transitions; status label set ${fallbackLabel}. Reason: ${error instanceof Error ? error.message : String(error)}`,
+      appliedLabel: fallbackLabel
+    };
+  }
+
+  const normalizedTarget = normalizeStatus(statusLabel);
+  const normalizedTargetComparable = normalizeComparable(statusLabel);
 
   const exact = transitions.find((transition) => normalizeStatus(transition.to.name) === normalizedTarget);
   if (exact) {
-    await transitionIssue(input.account, input.issueIdOrKey, exact.id);
-    return {
-      action: "transitioned",
-      details: `Transitioned to ${exact.to.name}; label set ${fallbackLabel}`,
-      appliedLabel: fallbackLabel
-    };
+    try {
+      await transitionIssue(input.account, input.issueIdOrKey, exact.id);
+      return {
+        action: "transitioned",
+        details: `Transitioned to ${exact.to.name}; label set ${fallbackLabel}`,
+        appliedLabel: fallbackLabel
+      };
+    } catch (error) {
+      console.warn("Jira status transition rejected; keeping label-only sync.", {
+        issueIdOrKey: input.issueIdOrKey,
+        statusLabel,
+        transitionId: exact.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return {
+        action: "labeled",
+        details: `Transition to ${exact.to.name} was rejected; status label set ${fallbackLabel}`,
+        appliedLabel: fallbackLabel
+      };
+    }
   }
 
   const fuzzy = transitions.find((transition) => {
@@ -681,12 +746,26 @@ export async function applyJiraStatusFromMonday(input: {
   });
 
   if (fuzzy) {
-    await transitionIssue(input.account, input.issueIdOrKey, fuzzy.id);
-    return {
-      action: "transitioned",
-      details: `Transitioned by fuzzy match to ${fuzzy.to.name}; label set ${fallbackLabel}`,
-      appliedLabel: fallbackLabel
-    };
+    try {
+      await transitionIssue(input.account, input.issueIdOrKey, fuzzy.id);
+      return {
+        action: "transitioned",
+        details: `Transitioned by fuzzy match to ${fuzzy.to.name}; label set ${fallbackLabel}`,
+        appliedLabel: fallbackLabel
+      };
+    } catch (error) {
+      console.warn("Jira fuzzy transition rejected; keeping label-only sync.", {
+        issueIdOrKey: input.issueIdOrKey,
+        statusLabel,
+        transitionId: fuzzy.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return {
+        action: "labeled",
+        details: `Transition by fuzzy match to ${fuzzy.to.name} was rejected; status label set ${fallbackLabel}`,
+        appliedLabel: fallbackLabel
+      };
+    }
   }
 
   const inferredCategory = inferStatusCategory(statusLabel);
@@ -696,12 +775,26 @@ export async function applyJiraStatusFromMonday(input: {
     );
 
     if (byCategory) {
-      await transitionIssue(input.account, input.issueIdOrKey, byCategory.id);
-      return {
-        action: "transitioned",
-        details: `Transitioned by category ${inferredCategory} to ${byCategory.to.name}; label set ${fallbackLabel}`,
-        appliedLabel: fallbackLabel
-      };
+      try {
+        await transitionIssue(input.account, input.issueIdOrKey, byCategory.id);
+        return {
+          action: "transitioned",
+          details: `Transitioned by category ${inferredCategory} to ${byCategory.to.name}; label set ${fallbackLabel}`,
+          appliedLabel: fallbackLabel
+        };
+      } catch (error) {
+        console.warn("Jira category transition rejected; keeping label-only sync.", {
+          issueIdOrKey: input.issueIdOrKey,
+          statusLabel,
+          transitionId: byCategory.id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return {
+          action: "labeled",
+          details: `Transition by category ${inferredCategory} to ${byCategory.to.name} was rejected; status label set ${fallbackLabel}`,
+          appliedLabel: fallbackLabel
+        };
+      }
     }
   }
 

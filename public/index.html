@@ -26,7 +26,8 @@
           First sync should use status label <em>Sync Jira</em>, then updates continue for later status changes.
         </div>
         <p class="subtitle">
-          Select your Jira account and destination project for this board.
+          This Monday board will become one Jira parent item in the selected project. Every Monday item
+          will sync as a Jira sub-item under that board item.
         </p>
 
         <div class="board-meta">
@@ -48,9 +49,20 @@
           <option value="">Loading accounts...</option>
         </select>
 
-        <label for="projectSelect">Jira project (space)</label>
+        <label for="projectSelect">Jira project / shared target board</label>
         <select id="projectSelect" disabled>
           <option value="">Select an account first</option>
+        </select>
+
+        <label for="parentIssueModeSelect">Board parent issue</label>
+        <select id="parentIssueModeSelect">
+          <option value="auto_create">Create a new Jira parent item for this board</option>
+          <option value="existing">Use an existing Jira parent item</option>
+        </select>
+
+        <label for="parentIssueKeyInput">Existing Jira parent issue key</label>
+        <select id="parentIssueKeyInput" disabled>
+          <option value="">Loading Jira issues...</option>
         </select>
 
         <fieldset class="rule-box">
@@ -113,7 +125,7 @@
 
         <div class="connection-box">
           <div class="connection-header">
-            <h2>Current Monday → Jira connections</h2>
+            <h2>Current board → Jira parent/sub-item links</h2>
             <span id="connectionCountBadge" class="connection-count">0</span>
           </div>
           <div id="connectionList" class="connection-list">

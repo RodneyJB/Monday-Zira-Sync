@@ -1,5 +1,7 @@
 const accountSelect = document.getElementById("accountSelect");
 const projectSelect = document.getElementById("projectSelect");
+const parentIssueModeSelect = document.getElementById("parentIssueModeSelect");
+const parentIssueKeyInput = document.getElementById("parentIssueKeyInput");
 const targetLanguageSelect = document.getElementById("targetLanguageSelect");
 const syncTriggerSelect = document.getElementById("syncTriggerSelect");
 const statusColumnIdInput = document.getElementById("statusColumnIdInput");
@@ -20,6 +22,7 @@ const statusEl = document.getElementById("status");
 let boardId = "";
 let boardViewId = "";
 let accounts = [];
+let projectIssues = [];
 let statusColumns = [];
 let syncColumns = { nameColumns: [], fileColumns: [] };
 
@@ -29,8 +32,23 @@ function setStatus(message, type = "") {
 }
 
 function setSaveEnabled() {
-  saveButton.disabled = !(boardId && accountSelect.value && projectSelect.value);
+  const validParent =
+    parentIssueModeSelect.value === "auto_create" || parentIssueKeyInput.value.trim().length > 0;
+
+  saveButton.disabled = !(boardId && accountSelect.value && projectSelect.value && validParent);
   resetBoardButton.disabled = !boardId;
+}
+
+function refreshParentIssueFieldState() {
+  const isExisting = parentIssueModeSelect.value === "existing";
+  parentIssueKeyInput.disabled = !isExisting;
+  if (!isExisting) {
+    parentIssueKeyInput.innerHTML = '<option value="">Uses a newly created parent item</option>';
+    parentIssueKeyInput.value = "";
+  } else if (accountSelect.value && projectSelect.value) {
+    void loadProjectIssueOptions(accountSelect.value, projectSelect.value);
+  }
+  setSaveEnabled();
 }
 
 function refreshRuleFieldState() {
@@ -253,6 +271,41 @@ async function loadProjects(accountId) {
   projectSelect.disabled = false;
 }
 
+async function loadProjectIssueOptions(accountId, projectKey) {
+  if (!accountId || !projectKey) {
+    parentIssueKeyInput.innerHTML = '<option value="">Select a Jira issue</option>';
+    parentIssueKeyInput.disabled = true;
+    projectIssues = [];
+    return;
+  }
+
+  try {
+    const data = await fetchJson(
+      `/api/jira/issues?accountId=${encodeURIComponent(accountId)}&projectKey=${encodeURIComponent(projectKey)}`
+    );
+    projectIssues = data.issues || [];
+
+    parentIssueKeyInput.innerHTML = "";
+    if (projectIssues.length === 0) {
+      parentIssueKeyInput.innerHTML = '<option value="">No Jira issues found in this project</option>';
+      parentIssueKeyInput.disabled = true;
+      return;
+    }
+
+    parentIssueKeyInput.append(new Option("Select a Jira parent issue", ""));
+    for (const issue of projectIssues) {
+      parentIssueKeyInput.append(
+        new Option(`${issue.key} — ${issue.summary || "Untitled issue"}`, issue.key)
+      );
+    }
+    parentIssueKeyInput.disabled = false;
+  } catch {
+    parentIssueKeyInput.innerHTML = '<option value="">Could not load Jira issues</option>';
+    parentIssueKeyInput.disabled = true;
+    projectIssues = [];
+  }
+}
+
 function renderConnections(connections = []) {
   const safeConnections = Array.isArray(connections) ? connections : [];
   connectionCountBadge.textContent = String(safeConnections.length);
@@ -303,6 +356,9 @@ async function loadExistingMapping() {
   accountSelect.value = mapping.accountId;
   await loadProjects(mapping.accountId);
   projectSelect.value = mapping.projectKey;
+  const mode = mapping.parentIssueMode || "auto_create";
+  parentIssueModeSelect.value = mode;
+  parentIssueKeyInput.value = mapping.parentIssueKey || "";
   boardViewId = mapping.boardViewId || boardViewId;
   targetLanguageSelect.value = mapping.targetLanguage || "none";
   syncTriggerSelect.value = mapping.syncTrigger || "manual";
@@ -335,6 +391,9 @@ accountSelect.addEventListener("change", async () => {
   try {
     setStatus("Loading Jira projects...");
     await loadProjects(accountId);
+    if (parentIssueModeSelect.value === "existing" && projectSelect.value) {
+      await loadProjectIssueOptions(accountId, projectSelect.value);
+    }
     setStatus("Projects loaded.", "ok");
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Could not load projects", "error");
@@ -343,7 +402,14 @@ accountSelect.addEventListener("change", async () => {
   setSaveEnabled();
 });
 
-projectSelect.addEventListener("change", setSaveEnabled);
+projectSelect.addEventListener("change", async () => {
+  setSaveEnabled();
+  if (parentIssueModeSelect.value === "existing" && accountSelect.value && projectSelect.value) {
+    await loadProjectIssueOptions(accountSelect.value, projectSelect.value);
+  }
+});
+parentIssueModeSelect.addEventListener("change", refreshParentIssueFieldState);
+parentIssueKeyInput.addEventListener("change", setSaveEnabled);
 syncTriggerSelect.addEventListener("change", refreshRuleFieldState);
 nameSourceSelect.addEventListener("change", refreshRuleFieldState);
 attachmentSourceSelect.addEventListener("change", refreshRuleFieldState);
@@ -355,6 +421,8 @@ saveButton.addEventListener("click", async () => {
   const accountId = accountSelect.value;
   const projectKey = projectSelect.value;
   const projectName = projectSelect.options[projectSelect.selectedIndex]?.text || "";
+  const parentIssueMode = parentIssueModeSelect.value;
+  const parentIssueKey = parentIssueMode === "existing" ? parentIssueKeyInput.value.trim() : "";
   const targetLanguage = targetLanguageSelect.value;
   const syncTrigger = syncTriggerSelect.value;
   const statusColumnId = statusColumnIdInput.value.trim();
@@ -400,6 +468,8 @@ saveButton.addEventListener("click", async () => {
         accountId,
         projectKey,
         projectName,
+        parentIssueMode,
+        parentIssueKey,
         targetLanguage,
         syncTrigger,
         statusColumnId: syncTrigger === "status_change" ? statusColumnId : "",
@@ -471,6 +541,7 @@ resetBoardButton.addEventListener("click", async () => {
 (async function init() {
   try {
     await loadAccounts();
+    refreshParentIssueFieldState();
     refreshRuleFieldState();
 
     const monday = window.mondaySdk ? window.mondaySdk() : null;
