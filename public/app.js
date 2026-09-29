@@ -240,6 +240,10 @@ async function applyFixedJiraTarget() {
     await loadProjects(fixedTarget.accountId);
     projectSelect.value = fixedTarget.projectKey;
     projectSelect.disabled = true;
+    if (parentIssueModeSelect.value === "existing") {
+      await loadProjectIssueOptions(fixedTarget.accountId, fixedTarget.projectKey);
+    }
+    refreshParentIssueFieldState();
     setStatus(`Fixed Jira target: ${fixedTarget.projectName} (${fixedTarget.projectKey})`, "ok");
   } catch {
     // Ignore fixed-target lookup failures and keep manual selection available.
@@ -359,6 +363,10 @@ async function loadExistingMapping() {
   const mode = mapping.parentIssueMode || "auto_create";
   parentIssueModeSelect.value = mode;
   parentIssueKeyInput.value = mapping.parentIssueKey || "";
+  if (mode === "existing" && mapping.accountId && mapping.projectKey) {
+    await loadProjectIssueOptions(mapping.accountId, mapping.projectKey);
+    parentIssueKeyInput.value = mapping.parentIssueKey || "";
+  }
   boardViewId = mapping.boardViewId || boardViewId;
   targetLanguageSelect.value = mapping.targetLanguage || "none";
   syncTriggerSelect.value = mapping.syncTrigger || "manual";
@@ -374,6 +382,7 @@ async function loadExistingMapping() {
       ? JSON.stringify(mapping.nameTranslations, null, 2)
       : "";
   refreshRuleFieldState();
+  refreshParentIssueFieldState();
   setStatus(`Current mapping: ${mapping.projectName} (${mapping.projectKey})`, "ok");
   setSaveEnabled();
   await loadConnections();
