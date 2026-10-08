@@ -72,14 +72,14 @@ export async function translateText(input: {
   googleQuery.searchParams.set("q", input.text);
 
   try {
-    const response = await fetch(googleQuery.toString(), { method: "GET" });
+    const response = await fetch(googleQuery.toString(), { method: "GET", signal: AbortSignal.timeout(10000) });
     if (!response.ok) {
       throw new Error(`Google translation endpoint returned ${response.status}`);
     }
 
     const data = (await response.json()) as unknown;
     if (!Array.isArray(data) || !Array.isArray(data[0])) {
-      return input.text;
+      throw new Error("Translation provider returned no usable text");
     }
 
     const translated = data[0]
@@ -96,21 +96,26 @@ export async function translateText(input: {
     if (translated) {
       return translated;
     }
+    throw new Error("Translation provider returned empty text");
   } catch {
     // Try a second provider when Google endpoint fails or returns empty text.
     try {
       const mmQuery = new URL("https://api.mymemory.translated.net/get");
       mmQuery.searchParams.set("q", input.text);
-      const sourceLanguage = detectLikelySourceLanguage(input.text);
+      // Short German work titles often lack the words used by our heuristic.
+      // For English output, attempt German-to-English rather than skipping them.
+      const sourceLanguage = normalizedLanguage === "en"
+        ? "de"
+        : detectLikelySourceLanguage(input.text);
       if (sourceLanguage === normalizedLanguage) {
         return input.text;
       }
 
       mmQuery.searchParams.set("langpair", `${sourceLanguage}|${normalizedLanguage}`);
 
-      const mmResponse = await fetch(mmQuery.toString(), { method: "GET" });
+      const mmResponse = await fetch(mmQuery.toString(), { method: "GET", signal: AbortSignal.timeout(10000) });
       if (!mmResponse.ok) {
-        return input.text;
+        throw new Error(`Fallback translation returned ${mmResponse.status}`);
       }
 
       const mmData = (await mmResponse.json()) as {
@@ -121,11 +126,14 @@ export async function translateText(input: {
 
       const translated = mmData.responseData?.translatedText?.trim() || "";
       if (!translated || isProviderErrorText(translated)) {
-        return input.text;
+        throw new Error("Fallback translation returned no usable text");
       }
 
       return translated;
-    } catch {
+    } catch (error) {
+      console.warn("Title translation failed; retaining original Monday title", {
+        targetLanguage: normalizedLanguage, error: error instanceof Error ? error.message : String(error)
+      });
       return input.text;
     }
   }
