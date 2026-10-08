@@ -258,7 +258,7 @@ export async function listJiraIssues(
   maxResults = 50
 ): Promise<Array<{ key: string; summary: string }>> {
   const url = new URL("/rest/api/3/search/jql", account.baseUrl);
-  const jql = `project = "${projectKey.replace(/"/g, '\\"')}" ORDER BY updated DESC`;
+  const jql = `project = "${projectKey.replace(/"/g, '\\"')}" AND issuetype NOT IN subTaskIssueTypes() ORDER BY updated DESC`;
 
   const response = await axios.post<{ issues?: Array<{ key?: string; fields?: { summary?: string } }> }>(
     url.toString(),
