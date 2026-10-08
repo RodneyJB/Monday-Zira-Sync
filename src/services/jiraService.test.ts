@@ -65,3 +65,43 @@ test("large attachments should be linked in the Jira description instead of comp
   assert.equal(fallbackText?.text, "Monday file");
   assert.equal(fallbackText?.marks?.[0]?.attrs.href, "https://mycompany.monday.com/boards/5100981950/pulses/123456789?asset_id=asset-42");
 });
+
+test("createJiraIssue retries rejected labels while preserving the Monday backlink", async (t) => {
+  const { default: axios } = await import("axios");
+  const { createJiraIssue } = await import("./jiraService.js");
+  const payloads: Array<{ fields: { labels?: string[]; description: unknown } }> = [];
+  t.mock.method(axios, "post", async (_url: string, payload: typeof payloads[number]) => {
+    payloads.push(payload);
+    if (payloads.length === 1) {
+      throw { response: { status: 400, data: { errors: {
+        labels: "Field 'labels' cannot be set. It is not on the appropriate screen, or unknown."
+      } } } };
+    }
+    return { data: { id: "1", key: "DF-99", self: "https://example.atlassian.net/issue/1" } };
+  });
+  const result = await createJiraIssue({
+    account: { id: "test", name: "Test", baseUrl: "https://example.atlassian.net", email: "test@example.com", apiToken: "test" },
+    projectKey: "DF", summary: "Monday test", labels: ["monday-item-123"],
+    mondayItemUrl: "https://example.monday.com/boards/456/pulses/123"
+  });
+  assert.equal(result.key, "DF-99");
+  assert.equal(payloads.length, 2);
+  assert.deepEqual(payloads[0].fields.labels, ["monday-item-123"]);
+  assert.equal(payloads[1].fields.labels, undefined);
+  assert.match(JSON.stringify(payloads[1].fields.description), /boards\/456\/pulses\/123/);
+});
+
+test("createJiraIssue does not retry an ambiguous server failure", async (t) => {
+  const { default: axios } = await import("axios");
+  const { createJiraIssue } = await import("./jiraService.js");
+  let calls = 0;
+  t.mock.method(axios, "post", async () => {
+    calls++;
+    throw { response: { status: 500 } };
+  });
+  await assert.rejects(createJiraIssue({
+    account: { id: "test", name: "Test", baseUrl: "https://example.atlassian.net", email: "test@example.com", apiToken: "test" },
+    projectKey: "DF", summary: "Monday test", priorityName: "High"
+  }));
+  assert.equal(calls, 1);
+});

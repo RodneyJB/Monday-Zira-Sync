@@ -390,7 +390,7 @@ export async function createJiraIssue(input: {
 
   const url = new URL("/rest/api/3/issue", account.baseUrl);
   const resolvedIssueTypeName = issueTypeName ?? (parentIssueKey ? "Sub-task" : "Task");
-  const buildPayload = (includePriority: boolean) => ({
+  const buildPayload = (includePriority: boolean, includeLabels: boolean) => ({
     fields: {
       project: {
         key: projectKey
@@ -413,7 +413,7 @@ export async function createJiraIssue(input: {
             }
           }
         : {}),
-      ...(labels && labels.length > 0 ? { labels } : {}),
+      ...(includeLabels && labels && labels.length > 0 ? { labels } : {}),
       description: buildJiraDescriptionDoc(
         description ?? "Created automatically from Monday board item.",
         mondayItemUrl,
@@ -422,30 +422,32 @@ export async function createJiraIssue(input: {
     }
   });
 
-  let response;
-  try {
-    response = await axios.post<JiraCreatedIssue>(url.toString(), buildPayload(true), {
-      headers: {
-        ...jiraHeaders(account),
-        "Content-Type": "application/json"
-      },
-      timeout: 15000
-    });
-  } catch (error) {
-    if (priorityName) {
-      response = await axios.post<JiraCreatedIssue>(url.toString(), buildPayload(false), {
-        headers: {
-          ...jiraHeaders(account),
-          "Content-Type": "application/json"
-        },
-        timeout: 15000
-      });
-    } else {
-      throw error;
+  let includePriority = Boolean(priorityName);
+  let includeLabels = Boolean(labels?.length);
+  for (;;) {
+    try {
+      const response = await axios.post<JiraCreatedIssue>(
+        url.toString(), buildPayload(includePriority, includeLabels), {
+          headers: { ...jiraHeaders(account), "Content-Type": "application/json" },
+          timeout: 15000
+        }
+      );
+      return response.data;
+    } catch (error) {
+      // Retry only explicit validation failures, never ambiguous server errors.
+      const response = (error as {
+        response?: { status?: number; data?: { errors?: Record<string, string> } }
+      })?.response;
+      if (response?.status !== 400) throw error;
+      const errors = response.data?.errors ?? {};
+      const dropLabels = includeLabels && typeof errors.labels === "string" &&
+        /cannot be set/i.test(errors.labels);
+      const dropPriority = includePriority && typeof errors.priority === "string";
+      if (!dropLabels && !dropPriority) throw error;
+      if (dropLabels) includeLabels = false;
+      if (dropPriority) includePriority = false;
     }
   }
-
-  return response.data;
 }
 
 export async function updateJiraIssueSummary(input: {
