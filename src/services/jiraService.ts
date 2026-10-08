@@ -422,6 +422,7 @@ export async function createJiraIssue(input: {
     }
   });
 
+  let rateLimitRetries = 0;
   let includePriority = Boolean(priorityName);
   let includeLabels = Boolean(labels?.length);
   for (;;) {
@@ -436,8 +437,25 @@ export async function createJiraIssue(input: {
     } catch (error) {
       // Retry only explicit validation failures, never ambiguous server errors.
       const response = (error as {
-        response?: { status?: number; data?: { errors?: Record<string, string> } }
+        response?: { status?: number; headers?: Record<string, unknown>; data?: { errors?: Record<string, string> } }
       })?.response;
+      if (response?.status === 429 && rateLimitRetries < 4) {
+        const retryAfter = response.headers?.["retry-after"];
+        const seconds = Number(retryAfter);
+        const dateDelay = typeof retryAfter === "string" ? Date.parse(retryAfter) - Date.now() : NaN;
+        const delay = Math.max(
+          1000 * 2 ** rateLimitRetries,
+          Number.isFinite(seconds) ? seconds * 1000 : Number.isFinite(dateDelay) ? dateDelay : 0
+        );
+        // A long quota cooldown needs a later manual retry, not a hanging webhook.
+        if (delay > 60000) throw error;
+        rateLimitRetries++;
+        console.warn("Jira rate limited issue creation; waiting before retry", {
+          projectKey, retry: rateLimitRetries, delayMs: delay
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
       if (response?.status !== 400) throw error;
       const errors = response.data?.errors ?? {};
       const dropLabels = includeLabels && typeof errors.labels === "string" &&
@@ -635,7 +653,10 @@ async function replaceMondayStatusLabel(
     timeout: 15000
   });
 
-  const existingLabels = issueResponse.data.fields.labels ?? [];
+  if (!issueResponse.data.fields || !Array.isArray(issueResponse.data.fields.labels)) {
+    return;
+  }
+  const existingLabels = issueResponse.data.fields.labels;
   const preservedLabels = existingLabels.filter((label) => {
     if (label.startsWith(mondayStatusLabelPrefix)) {
       return false;
@@ -676,6 +697,10 @@ export async function applyJiraStatusFromMonday(input: {
   const statusLabel = input.statusLabel.trim();
   if (!statusLabel) {
     return { action: "skipped", details: "No status label available" };
+  }
+
+  if (normalizeStatus(statusLabel) === "sync jira") {
+    return { action: "skipped", details: "Sync Jira is a transfer command, not a workflow status" };
   }
 
   const fallbackLabel = formatFallbackStatusLabel(statusLabel);

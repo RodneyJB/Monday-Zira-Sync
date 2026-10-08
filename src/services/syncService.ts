@@ -135,6 +135,7 @@ function errorMessage(error: unknown): string {
 }
 
 const inFlightSyncs = new Map<string, Promise<SyncResult>>();
+let syncQueue: Promise<void> = Promise.resolve();
 
 function makeSyncKey(boardId: string, itemId: string): string {
   return `${boardId}:${itemId}`;
@@ -812,7 +813,10 @@ export async function syncMondayItemToJira(input: {
     return inFlight;
   }
 
-  const running = runSyncMondayItemToJira(input);
+  // Serialize distinct items so bulk status changes do not flood Jira.
+  // A failed item must not block the remaining queue.
+  const running = syncQueue.then(() => runSyncMondayItemToJira(input));
+  syncQueue = running.then(() => undefined, () => undefined);
   inFlightSyncs.set(key, running);
 
   try {

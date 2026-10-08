@@ -105,3 +105,33 @@ test("createJiraIssue does not retry an ambiguous server failure", async (t) => 
   }));
   assert.equal(calls, 1);
 });
+test("createJiraIssue waits and retries an explicit Jira 429 response", async (t) => {
+  const { default: axios } = await import("axios");
+  const { createJiraIssue } = await import("./jiraService.js");
+  let calls = 0;
+  const started = Date.now();
+  t.mock.method(axios, "post", async () => {
+    calls++;
+    if (calls === 1) throw { response: { status: 429, headers: { "retry-after": "1" } } };
+    return { data: { id: "1", key: "DF-99", self: "https://example.atlassian.net/issue/1" } };
+  });
+  const result = await createJiraIssue({
+    account: { id: "test", name: "Test", baseUrl: "https://example.atlassian.net", email: "test@example.com", apiToken: "test" },
+    projectKey: "DF", summary: "Rate limit test"
+  });
+  assert.equal(result.key, "DF-99");
+  assert.equal(calls, 2);
+  assert.ok(Date.now() - started >= 990);
+});
+
+test("Sync Jira command does not send label or workflow requests", async (t) => {
+  const { default: axios } = await import("axios");
+  const { applyJiraStatusFromMonday } = await import("./jiraService.js");
+  t.mock.method(axios, "get", () => { assert.fail("Unexpected Jira status request"); });
+  t.mock.method(axios, "put", () => { assert.fail("Unexpected Jira label update"); });
+  const result = await applyJiraStatusFromMonday({
+    account: { id: "test", name: "Test", baseUrl: "https://example.atlassian.net", email: "test@example.com", apiToken: "test" },
+    issueIdOrKey: "DF-99", statusLabel: "Sync Jira"
+  });
+  assert.equal(result.action, "skipped");
+});
